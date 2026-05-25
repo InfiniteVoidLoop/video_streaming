@@ -114,8 +114,9 @@ class Client:
                             self.updateMovie(self.writeFrame(fullFrame))
                             buffer.clear()
             except:
+                buffer.clear()
                 # Stop listening upon requesting PAUSE or TEARDOWN
-                if self.playEvent.is_set(): 
+                if self.playEvent.isSet(): 
                     break
                 
                 # Upon receiving ACK for TEARDOWN request,
