@@ -92,22 +92,30 @@ class Client:
     
     def listenRtp(self):        
         """Listen for RTP packets."""
+        buffer = []
         while True:
             try:
-                data = self.rtpSocket.recv(20480)
+                data = self.rtpSocket.recv(2000)
                 if data:
                     rtpPacket = RtpPacket()
                     rtpPacket.decode(data)
-                    
-                    currFrameNbr = rtpPacket.seqNum()
-                    print("Current Seq Num: " + str(currFrameNbr))
-                                        
-                    if currFrameNbr > self.frameNbr: # Discard the late packet
-                        self.frameNbr = currFrameNbr
-                        self.updateMovie(self.writeFrame(rtpPacket.getPayload()))
+                     
+                    currSeqNbr = rtpPacket.seqNum()
+                    print("Current Seq Num: " + str(currSeqNbr))
+                    print("Size of packet: " + str(len(rtpPacket.getPayload())))
+
+                    if currSeqNbr >= self.frameNbr: # Discard the late packet
+                        print("Save data on RAM buffer")
+                        self.frameNbr = currSeqNbr
+                        buffer.append(rtpPacket.getPayload())
+
+                        if rtpPacket.marker() == 1:
+                            fullFrame = b''.join(buffer)
+                            self.updateMovie(self.writeFrame(fullFrame))
+                            buffer.clear()
             except:
                 # Stop listening upon requesting PAUSE or TEARDOWN
-                if self.playEvent.isSet(): 
+                if self.playEvent.is_set(): 
                     break
                 
                 # Upon receiving ACK for TEARDOWN request,
