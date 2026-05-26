@@ -174,46 +174,29 @@ class Client:
     def playMovie(self):
         """Play button handler."""
         if self.state == self.READY:
-            # Kill the old listenRtp thread before starting a new one.
+            # Kill the old listen thread before starting a new one.
             if hasattr(self, 'playEvent'):
                 self.playEvent.set()  # Signal old thread to stop
-            if hasattr(self, '_rtpThread') and self._rtpThread.is_alive():
-                self._rtpThread.join(timeout=1.0)  # Wait for it to die
+            if hasattr(self, '_rtpThread') and self._rtpThread.is_alive(): self._rtpThread.join(timeout=1.0)  # Wait for it to die
             
             # Now safe to create new event and thread
             self.playEvent = threading.Event()
             self.playEvent.clear()
-            self._rtpThread = threading.Thread(target=self.listenRtp)
+            
+            if self.transport == 'UDP':
+                self._rtpThread = threading.Thread(target=self.listenRtpWithUDP)
+            else:
+                self._rtpThread = threading.Thread(target=self.listenRtpWithTCP)
+                
             self._rtpThread.start()
             self.sendRtspRequest(self.PLAY)
-    
-    def listenRtp(self):        
-        """Listen for RTP packets."""
+            
+    def listenRtpWithUDP(self):        
+        """Listen for RTP packets using UDP"""
         buffer = []
-        if self.transport == 'TCP':
-            try:
-                # Accept connection from server with a timeout of 5 seconds
-                self.rtpConnection, addr = self.rtpSocket.accept()
-                self.rtpConnection.settimeout(0.5)
-                print("RTP/TCP connection established with server")
-            except Exception as e:
-                print(f"RTP/TCP accept failed or timed out: {e}")
-                return
-
         while True:
             try:
-                if self.transport == 'UDP':
-                    data = self.rtpSocket.recv(2000)
-                else: # TCP
-                    # Read 2-byte length prefix
-                    length_bytes = self.recv_all(self.rtpConnection, 2)
-                    if not length_bytes:
-                        break
-                    length = int.from_bytes(length_bytes, byteorder='big')
-                    data = self.recv_all(self.rtpConnection, length)
-                    if not data:
-                        break
-
+                data = self.rtpSocket.recv(2000)
                 if data:
                     rtpPacket = RtpPacket()
                     rtpPacket.decode(data)
@@ -237,9 +220,51 @@ class Client:
                     break
                 
                 # Upon receiving ACK for TEARDOWN request,
+                # close the RTP socket
+                if self.teardownAcked == 1:
+                    try:
+                        self.rtpSocket.shutdown(socket.SHUT_RDWR)
+                        self.rtpSocket.close()
+                    except:
+                        pass
+                    break
+                           
+    def listenRtpWithTCP(self):        
+        """Listen for video frames using TCP frame-by-frame"""
+        try:
+            # Accept connection from server with a timeout of 5 seconds
+            self.rtpSocket.settimeout(5.0)
+            self.rtpConnection, addr = self.rtpSocket.accept()
+            self.rtpConnection.settimeout(0.5)
+            print("RTP/TCP connection established with server")
+        except Exception as e:
+            print(f"RTP/TCP accept failed or timed out: {e}")
+            return
+
+        while True:
+            try:
+                # Read 5-byte length prefix (ASCII string)
+                length_bytes = self.recv_all(self.rtpConnection, 5)
+                if not length_bytes:
+                    break
+                length = int(length_bytes.decode())
+                data = self.recv_all(self.rtpConnection, length)
+                if not data:
+                    break
+
+                if data:
+                    print("Received Frame over TCP")
+                    print("Size of packet: " + str(len(data)))
+                    self.updateMovie(self.writeFrame(data))
+            except:
+                # Stop listening upon requesting PAUSE or TEARDOWN
+                if self.playEvent.isSet(): 
+                    break
+                
+                # Upon receiving ACK for TEARDOWN request,
                 # close the RTP socket and connection
                 if self.teardownAcked == 1:
-                    if self.transport == 'TCP' and hasattr(self, 'rtpConnection') and self.rtpConnection:
+                    if hasattr(self, 'rtpConnection') and self.rtpConnection:
                         try:
                             self.rtpConnection.shutdown(socket.SHUT_RDWR)
                             self.rtpConnection.close()
@@ -252,7 +277,7 @@ class Client:
                         pass
                     break
 
-        if self.transport == 'TCP' and hasattr(self, 'rtpConnection') and self.rtpConnection:
+        if hasattr(self, 'rtpConnection') and self.rtpConnection:
             try:
                 self.rtpConnection.close()
             except:

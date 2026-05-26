@@ -125,10 +125,8 @@ class ServerWorker:
             self.clientInfo['rtpSocket'].close()
     
     # NOTE: Implement fragmentation for frames exceeding the MTU
-    def sendRtp(self):
-        """Send RTP packets."""
-        MAX_RTP_PAYLOAD_SIZE = 1400 # MTU - RTP header size
-        is_tcp = (self.clientInfo.get('transport', 'UDP') == 'TCP')
+    def sendRtpWithTCP(self):
+        """Send video frames over TCP frame-by-frame with a 5-byte ASCII size header."""
         while True:
             self.clientInfo['event'].wait(0.05) 
             
@@ -137,7 +135,28 @@ class ServerWorker:
                 break 
                 
             data = self.clientInfo['videoStream'].nextFrame()
+            if data: 
+                try:
+                    frameSize = len(data)
+                    # Format size as a 5-byte ASCII string, padded with leading zeros (e.g. "06742")
+                    sizeHeader = str(frameSize).zfill(5).encode()
+                    # Send 5-byte size header followed by the raw frame data
+                    self.clientInfo['rtpSocket'].sendall(sizeHeader + data)
+                except Exception as e:
+                    print(f"Sending video frame with TCP error: {e}")
+                    break
+
+    def sendRtpWithUDP(self):
+        """Send RTP packets using UDP"""
+        MAX_RTP_PAYLOAD_SIZE = 1400 # MTU - RTP header size
+        while True:
+            self.clientInfo['event'].wait(0.05) 
             
+            # Stop sending if request is PAUSE or TEARDOWN
+            if self.clientInfo['event'].isSet(): 
+                break 
+                
+            data = self.clientInfo['videoStream'].nextFrame()
             if data: 
                 frameSize = len(data)
                 bytesSent = 0
@@ -149,19 +168,20 @@ class ServerWorker:
                         address = self.clientInfo['rtspSocket'][1][0]
                         port = int(self.clientInfo['rtpPort'])
                         packet = self.makeRtp(chunkData, self.rtpSeq, markerBit)
-                        
-                        if is_tcp:
-                            # Prepend with a 2-byte length for TCP framing
-                            length = len(packet)
-                            self.clientInfo['rtpSocket'].sendall(length.to_bytes(2, byteorder='big') + packet)
-                        else:
-                            self.clientInfo['rtpSocket'].sendto(packet, (address, port))
+                        self.clientInfo['rtpSocket'].sendto(packet, (address, port))
                             
                         self.rtpSeq += 1
                         bytesSent += chunkSize
                     except Exception as e:
-                        print(f"Connection Error in sendRtp: {e}")
+                        print(f"Sending RTP with UDP error: {e}")
                         break
+
+    def sendRtp(self):
+        """Send RTP packets."""
+        if self.clientInfo.get('transport', 'UDP') == 'TCP':
+            return self.sendRtpWithTCP()
+        else:
+            return self.sendRtpWithUDP()
 
     def makeRtp(self, payload, frameNbr, markerBit):
         """RTP-packetize the video data."""
