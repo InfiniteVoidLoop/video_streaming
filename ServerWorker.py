@@ -1,5 +1,7 @@
 from random import randint
 import sys, traceback, threading, socket
+import io
+from PIL import Image
 
 from VideoStream import VideoStream
 from RtpPacket import RtpPacket
@@ -30,11 +32,17 @@ class ServerWorker:
     def recvRtspRequest(self):
         """Receive RTSP request from the client."""
         connSocket = self.clientInfo['rtspSocket'][0]
-        while True:            
-            data = connSocket.recv(256)
-            if data:
-                print("Data received:\n" + data.decode("utf-8"))
-                self.processRtspRequest(data.decode("utf-8"))
+        try:
+            while True:            
+                data = connSocket.recv(256)
+                if data:
+                    print("Data received:\n" + data.decode("utf-8"))
+                    self.processRtspRequest(data.decode("utf-8"))
+                else:
+                    # Client disconnected
+                    raise ConnectionError("Client disconnected")
+        except BlockingIOError:
+            pass
     
     def processRtspRequest(self, data):
         """Process RTSP request sent from the client."""

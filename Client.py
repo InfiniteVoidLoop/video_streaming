@@ -37,6 +37,7 @@ class Client:
         self.connectToServer()
         self.frameNbr = -1
         self.transport = "UDP"
+        self.quality = "SD"
         self.rtpConnection = None
         
     def createWidgets(self):
@@ -72,12 +73,12 @@ class Client:
     def setupMovie(self):
         """Setup button handler."""
         if self.state == self.INIT:
-            self.chooseTransport()
+            self.chooseQuality()
 
-    def chooseTransport(self):
-        # Create a beautiful modal window to choose transport
-        self.transport_window = Toplevel(self.master)
-        self.transport_window.title("Transport Protocol")
+    def chooseQuality(self):
+        # Create a beautiful modal window to choose quality
+        self.quality_window = Toplevel(self.master)
+        self.quality_window.title("Video Quality")
         
         # Center the pop-up on the screen
         w, h = 320, 160
@@ -85,31 +86,31 @@ class Client:
         hs = self.master.winfo_screenheight()
         x = (ws/2) - (w/2)
         y = (hs/2) - (h/2)
-        self.transport_window.geometry('%dx%d+%d+%d' % (w, h, x, y))
-        self.transport_window.resizable(False, False)
+        self.quality_window.geometry('%dx%d+%d+%d' % (w, h, x, y))
+        self.quality_window.resizable(False, False)
         
         # Apply premium look/styling
-        self.transport_window.configure(bg="#1E1E1E")
+        self.quality_window.configure(bg="#1E1E1E")
         
         title_label = Label(
-            self.transport_window, 
-            text="Choose Transport Protocol", 
+            self.quality_window, 
+            text="Choose Video Quality", 
             fg="#FFFFFF", 
             bg="#1E1E1E", 
             font=("Helvetica", 12, "bold")
         )
         title_label.pack(pady=12)
         
-        self.transport_var = StringVar(value="UDP")
+        self.quality_var = StringVar(value="SD")
         
-        frame = Frame(self.transport_window, bg="#1E1E1E")
+        frame = Frame(self.quality_window, bg="#1E1E1E")
         frame.pack()
         
-        rb_udp = Radiobutton(
+        rb_sd = Radiobutton(
             frame, 
-            text="UDP (Standard)", 
-            variable=self.transport_var, 
-            value="UDP", 
+            text="SD (720p) - UDP", 
+            variable=self.quality_var, 
+            value="SD", 
             fg="#E0E0E0", 
             bg="#1E1E1E", 
             selectcolor="#2C2C2C",
@@ -117,13 +118,13 @@ class Client:
             activebackground="#1E1E1E",
             font=("Helvetica", 10)
         )
-        rb_udp.pack(anchor=W, pady=2)
+        rb_sd.pack(anchor=W, pady=2)
         
-        rb_tcp = Radiobutton(
+        rb_hd = Radiobutton(
             frame, 
-            text="TCP (Reliable)", 
-            variable=self.transport_var, 
-            value="TCP", 
+            text="HD (1080p) - TCP", 
+            variable=self.quality_var, 
+            value="HD", 
             fg="#E0E0E0", 
             bg="#1E1E1E", 
             selectcolor="#2C2C2C",
@@ -131,13 +132,13 @@ class Client:
             activebackground="#1E1E1E",
             font=("Helvetica", 10)
         )
-        rb_tcp.pack(anchor=W, pady=2)
+        rb_hd.pack(anchor=W, pady=2)
         
         btn_ok = Button(
-            self.transport_window, 
+            self.quality_window, 
             text="OK", 
             width=12, 
-            command=self.confirmTransport,
+            command=self.confirmQuality,
             fg="#FFFFFF",
             bg="#007ACC",
             activeforeground="#FFFFFF",
@@ -148,13 +149,18 @@ class Client:
         btn_ok.pack(pady=12)
         
         # Make dialog modal
-        self.transport_window.transient(self.master)
-        self.transport_window.grab_set()
-        self.master.wait_window(self.transport_window)
+        self.quality_window.transient(self.master)
+        self.quality_window.grab_set()
+        self.master.wait_window(self.quality_window)
 
-    def confirmTransport(self):
-        self.transport = self.transport_var.get()
-        self.transport_window.destroy()
+    def confirmQuality(self):
+        self.quality = self.quality_var.get()
+        if self.quality == "HD":
+            self.transport = "TCP"
+        else:
+            self.transport = "UDP"
+            
+        self.quality_window.destroy()
         self.sendRtspRequest(self.SETUP)
     
     def exitClient(self):
@@ -162,7 +168,7 @@ class Client:
         self.sendRtspRequest(self.TEARDOWN)     
         self.master.destroy() # Close the gui window
         try:
-            os.remove(CACHE_FILE_NAME + str(self.sessionId) + CACHE_FILE_EXT) # Delete the cache image from video
+            os.remove(CACHE_FILE_NAME + self.quality.lower() + "-" + str(self.sessionId) + CACHE_FILE_EXT) # Delete the cache image from video
         except:
             pass
 
@@ -301,7 +307,7 @@ class Client:
                     
     def writeFrame(self, data):
         """Write the received frame to a temp image file. Return the image file."""
-        cachename = CACHE_FILE_NAME + str(self.sessionId) + CACHE_FILE_EXT
+        cachename = CACHE_FILE_NAME + self.quality.lower() + "-" + str(self.sessionId) + CACHE_FILE_EXT
         file = open(cachename, "wb")
         file.write(data)
         file.close()
