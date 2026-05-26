@@ -3,6 +3,8 @@ import tkinter.messagebox
 from PIL import Image, ImageTk
 import socket, threading, sys, traceback, os
 
+tkMessageBox = tkinter.messagebox
+
 from RtpPacket import RtpPacket
 
 CACHE_FILE_NAME = "cache-"
@@ -34,6 +36,8 @@ class Client:
         self.teardownAcked = 0
         self.connectToServer()
         self.frameNbr = -1
+        self.transport = "UDP"
+        self.rtpConnection = None
         
     def createWidgets(self):
         """Build GUI."""
@@ -68,13 +72,99 @@ class Client:
     def setupMovie(self):
         """Setup button handler."""
         if self.state == self.INIT:
-            self.sendRtspRequest(self.SETUP)
+            self.chooseTransport()
+
+    def chooseTransport(self):
+        # Create a beautiful modal window to choose transport
+        self.transport_window = Toplevel(self.master)
+        self.transport_window.title("Transport Protocol")
+        
+        # Center the pop-up on the screen
+        w, h = 320, 160
+        ws = self.master.winfo_screenwidth()
+        hs = self.master.winfo_screenheight()
+        x = (ws/2) - (w/2)
+        y = (hs/2) - (h/2)
+        self.transport_window.geometry('%dx%d+%d+%d' % (w, h, x, y))
+        self.transport_window.resizable(False, False)
+        
+        # Apply premium look/styling
+        self.transport_window.configure(bg="#1E1E1E")
+        
+        title_label = Label(
+            self.transport_window, 
+            text="Choose Transport Protocol", 
+            fg="#FFFFFF", 
+            bg="#1E1E1E", 
+            font=("Helvetica", 12, "bold")
+        )
+        title_label.pack(pady=12)
+        
+        self.transport_var = StringVar(value="UDP")
+        
+        frame = Frame(self.transport_window, bg="#1E1E1E")
+        frame.pack()
+        
+        rb_udp = Radiobutton(
+            frame, 
+            text="UDP (Standard)", 
+            variable=self.transport_var, 
+            value="UDP", 
+            fg="#E0E0E0", 
+            bg="#1E1E1E", 
+            selectcolor="#2C2C2C",
+            activeforeground="#FFFFFF",
+            activebackground="#1E1E1E",
+            font=("Helvetica", 10)
+        )
+        rb_udp.pack(anchor=W, pady=2)
+        
+        rb_tcp = Radiobutton(
+            frame, 
+            text="TCP (Reliable)", 
+            variable=self.transport_var, 
+            value="TCP", 
+            fg="#E0E0E0", 
+            bg="#1E1E1E", 
+            selectcolor="#2C2C2C",
+            activeforeground="#FFFFFF",
+            activebackground="#1E1E1E",
+            font=("Helvetica", 10)
+        )
+        rb_tcp.pack(anchor=W, pady=2)
+        
+        btn_ok = Button(
+            self.transport_window, 
+            text="OK", 
+            width=12, 
+            command=self.confirmTransport,
+            fg="#FFFFFF",
+            bg="#007ACC",
+            activeforeground="#FFFFFF",
+            activebackground="#005999",
+            relief=FLAT,
+            font=("Helvetica", 10, "bold")
+        )
+        btn_ok.pack(pady=12)
+        
+        # Make dialog modal
+        self.transport_window.transient(self.master)
+        self.transport_window.grab_set()
+        self.master.wait_window(self.transport_window)
+
+    def confirmTransport(self):
+        self.transport = self.transport_var.get()
+        self.transport_window.destroy()
+        self.sendRtspRequest(self.SETUP)
     
     def exitClient(self):
         """Teardown button handler."""
         self.sendRtspRequest(self.TEARDOWN)     
         self.master.destroy() # Close the gui window
-        os.remove(CACHE_FILE_NAME + str(self.sessionId) + CACHE_FILE_EXT) # Delete the cache image from video
+        try:
+            os.remove(CACHE_FILE_NAME + str(self.sessionId) + CACHE_FILE_EXT) # Delete the cache image from video
+        except:
+            pass
 
     def pauseMovie(self):
         """Pause button handler."""
@@ -85,8 +175,6 @@ class Client:
         """Play button handler."""
         if self.state == self.READY:
             # Kill the old listenRtp thread before starting a new one.
-            # Without this, two threads recv() on the same socket and
-            # split chunks randomly, corrupting every frame.
             if hasattr(self, 'playEvent'):
                 self.playEvent.set()  # Signal old thread to stop
             if hasattr(self, '_rtpThread') and self._rtpThread.is_alive():
@@ -102,14 +190,37 @@ class Client:
     def listenRtp(self):        
         """Listen for RTP packets."""
         buffer = []
+        if self.transport == 'TCP':
+            try:
+                # Accept connection from server with a timeout of 5 seconds
+                self.rtpConnection, addr = self.rtpSocket.accept()
+                self.rtpConnection.settimeout(0.5)
+                print("RTP/TCP connection established with server")
+            except Exception as e:
+                print(f"RTP/TCP accept failed or timed out: {e}")
+                return
+
         while True:
             try:
-                data = self.rtpSocket.recv(2000)
+                if self.transport == 'UDP':
+                    data = self.rtpSocket.recv(2000)
+                else: # TCP
+                    # Read 2-byte length prefix
+                    length_bytes = self.recv_all(self.rtpConnection, 2)
+                    if not length_bytes:
+                        break
+                    length = int.from_bytes(length_bytes, byteorder='big')
+                    data = self.recv_all(self.rtpConnection, length)
+                    if not data:
+                        break
+
                 if data:
                     rtpPacket = RtpPacket()
                     rtpPacket.decode(data)
                      
                     currSeqNbr = rtpPacket.seqNum()
+                    print("Current Seq Num: " + str(currSeqNbr))
+                    print("Size of packet: " + str(len(data)))
 
                     if currSeqNbr > self.frameNbr: # Discard the late packet
                         self.frameNbr = currSeqNbr
@@ -126,11 +237,42 @@ class Client:
                     break
                 
                 # Upon receiving ACK for TEARDOWN request,
-                # close the RTP socket
+                # close the RTP socket and connection
                 if self.teardownAcked == 1:
-                    self.rtpSocket.shutdown(socket.SHUT_RDWR)
-                    self.rtpSocket.close()
+                    if self.transport == 'TCP' and hasattr(self, 'rtpConnection') and self.rtpConnection:
+                        try:
+                            self.rtpConnection.shutdown(socket.SHUT_RDWR)
+                            self.rtpConnection.close()
+                        except:
+                            pass
+                    try:
+                        self.rtpSocket.shutdown(socket.SHUT_RDWR)
+                        self.rtpSocket.close()
+                    except:
+                        pass
                     break
+
+        if self.transport == 'TCP' and hasattr(self, 'rtpConnection') and self.rtpConnection:
+            try:
+                self.rtpConnection.close()
+            except:
+                pass
+
+    def recv_all(self, sock, n):
+        """Helper to receive exactly n bytes from a TCP socket."""
+        data = b''
+        while len(data) < n:
+            try:
+                packet = sock.recv(n - len(data))
+                if not packet:
+                    return None
+                data += packet
+            except socket.timeout:
+                if len(data) > 0:
+                    continue
+                else:
+                    raise
+        return data
                     
     def writeFrame(self, data):
         """Write the received frame to a temp image file. Return the image file."""
@@ -157,10 +299,6 @@ class Client:
     
     def sendRtspRequest(self, requestCode):
         """Send RTSP request to the server."""  
-        #-------------
-        # TO COMPLETE
-        #-------------
-        
         # Setup request
         if requestCode == self.SETUP and self.state == self.INIT:
             threading.Thread(target=self.recvRtspReply).start()
@@ -168,7 +306,7 @@ class Client:
             self.rtspSeq += 1
             
             # Write the RTSP request to be sent.
-            request = 'SETUP ' + self.fileName + ' RTSP/1.0\nCSeq: ' + str(self.rtspSeq) + '\nTransport: RTP/UDP; client_port= ' + str(self.rtpPort)
+            request = 'SETUP ' + self.fileName + ' RTSP/1.0\nCSeq: ' + str(self.rtspSeq) + '\nTransport: RTP/' + self.transport + '; client_port= ' + str(self.rtpPort)
             
             # Keep track of the sent request.
             self.requestSent = self.SETUP
@@ -243,9 +381,6 @@ class Client:
             if self.sessionId == session:
                 if int(lines[0].split(' ')[1]) == 200: 
                     if self.requestSent == self.SETUP:
-                        #-------------
-                        # TO COMPLETE
-                        #-------------
                         # Update RTSP state.
                         self.state = self.READY
                         
@@ -264,20 +399,22 @@ class Client:
     
     def openRtpPort(self):
         """Open RTP socket binded to a specified port."""
-        #-------------
-        # TO COMPLETE
-        #-------------
-        # Create a new datagram socket to receive RTP packets from the server
-        self.rtpSocket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        
-        # Set the timeout value of the socket to 0.5sec
-        self.rtpSocket.settimeout(0.5)
-        
-        try:
-            # Bind the socket to the address using the RTP port given by the client user
-            self.rtpSocket.bind(('', self.rtpPort))
-        except:
-            tkMessageBox.showwarning('Unable to Bind', 'Unable to bind PORT=%d' %self.rtpPort)
+        if self.transport == 'UDP':
+            self.rtpSocket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            self.rtpSocket.settimeout(0.5)
+            try:
+                self.rtpSocket.bind(('', self.rtpPort))
+            except:
+                tkMessageBox.showwarning('Unable to Bind', 'Unable to bind PORT=%d' %self.rtpPort)
+        else: # TCP
+            self.rtpSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            self.rtpSocket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            try:
+                self.rtpSocket.bind(('', self.rtpPort))
+                self.rtpSocket.listen(1)
+                print(f"RTP/TCP socket listening on port {self.rtpPort}")
+            except:
+                tkMessageBox.showwarning('Unable to Bind', 'Unable to bind PORT=%d' %self.rtpPort)
 
     def handler(self):
         """Handler on explicitly closing the GUI window."""

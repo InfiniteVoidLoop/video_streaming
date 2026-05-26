@@ -67,17 +67,34 @@ class ServerWorker:
                 # Send RTSP reply
                 self.replyRtsp(self.OK_200, seq[1])
                 
-                # Get the RTP/UDP port from the last line
-                self.clientInfo['rtpPort'] = request[2].split(' ')[3]
-        
+                # Parse Transport header
+                transport_line = request[2]
+                self.clientInfo['transport'] = 'UDP'
+                if 'TCP' in transport_line:
+                    self.clientInfo['transport'] = 'TCP'
+                
+                # Extract client_port robustly
+                parts = transport_line.split(';')
+                for part in parts:
+                    if 'client_port' in part:
+                        self.clientInfo['rtpPort'] = part.split('=')[1].strip()
+                        break
+                        
         # Process PLAY request      
         elif requestType == self.PLAY:
             if self.state == self.READY:
                 print("processing PLAY\n")
                 self.state = self.PLAYING
                 
-                # Create a new socket for RTP/UDP
-                self.clientInfo["rtpSocket"] = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+                # Create a new socket for RTP
+                if self.clientInfo.get('transport', 'UDP') == 'TCP':
+                    self.clientInfo["rtpSocket"] = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                    address = self.clientInfo['rtspSocket'][1][0]
+                    port = int(self.clientInfo['rtpPort'])
+                    print(f"Connecting RTP/TCP socket to {address}:{port}")
+                    self.clientInfo["rtpSocket"].connect((address, port))
+                else:
+                    self.clientInfo["rtpSocket"] = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
                 
                 self.replyRtsp(self.OK_200, seq[1])
                 
@@ -109,8 +126,9 @@ class ServerWorker:
     
     # NOTE: Implement fragmentation for frames exceeding the MTU
     def sendRtp(self):
-        """Send RTP packets over UDP."""
+        """Send RTP packets."""
         MAX_RTP_PAYLOAD_SIZE = 1400 # MTU - RTP header size
+        is_tcp = (self.clientInfo.get('transport', 'UDP') == 'TCP')
         while True:
             self.clientInfo['event'].wait(0.05) 
             
@@ -130,11 +148,20 @@ class ServerWorker:
                     try:
                         address = self.clientInfo['rtspSocket'][1][0]
                         port = int(self.clientInfo['rtpPort'])
-                        self.clientInfo['rtpSocket'].sendto(self.makeRtp(chunkData, self.rtpSeq, markerBit),(address,port))
+                        packet = self.makeRtp(chunkData, self.rtpSeq, markerBit)
+                        
+                        if is_tcp:
+                            # Prepend with a 2-byte length for TCP framing
+                            length = len(packet)
+                            self.clientInfo['rtpSocket'].sendall(length.to_bytes(2, byteorder='big') + packet)
+                        else:
+                            self.clientInfo['rtpSocket'].sendto(packet, (address, port))
+                            
                         self.rtpSeq += 1
                         bytesSent += chunkSize
-                    except:
-                        print("Connection Error")
+                    except Exception as e:
+                        print(f"Connection Error in sendRtp: {e}")
+                        break
 
     def makeRtp(self, payload, frameNbr, markerBit):
         """RTP-packetize the video data."""
