@@ -135,9 +135,6 @@ class ServerWorker:
                         bytesSent += chunkSize
                     except:
                         print("Connection Error")
-                        #print('-'*60)
-                        #traceback.print_exc(file=sys.stdout)
-                        #print('-'*60)
 
     def makeRtp(self, payload, frameNbr, markerBit):
         """RTP-packetize the video data."""

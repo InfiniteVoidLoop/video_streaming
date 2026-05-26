@@ -33,7 +33,7 @@ class Client:
         self.requestSent = -1
         self.teardownAcked = 0
         self.connectToServer()
-        self.frameNbr = 0
+        self.frameNbr = -1
         
     def createWidgets(self):
         """Build GUI."""
@@ -84,10 +84,19 @@ class Client:
     def playMovie(self):
         """Play button handler."""
         if self.state == self.READY:
-            # Create a new thread to listen for RTP packets
-            threading.Thread(target=self.listenRtp).start()
+            # Kill the old listenRtp thread before starting a new one.
+            # Without this, two threads recv() on the same socket and
+            # split chunks randomly, corrupting every frame.
+            if hasattr(self, 'playEvent'):
+                self.playEvent.set()  # Signal old thread to stop
+            if hasattr(self, '_rtpThread') and self._rtpThread.is_alive():
+                self._rtpThread.join(timeout=1.0)  # Wait for it to die
+            
+            # Now safe to create new event and thread
             self.playEvent = threading.Event()
             self.playEvent.clear()
+            self._rtpThread = threading.Thread(target=self.listenRtp)
+            self._rtpThread.start()
             self.sendRtspRequest(self.PLAY)
     
     def listenRtp(self):        
@@ -101,11 +110,8 @@ class Client:
                     rtpPacket.decode(data)
                      
                     currSeqNbr = rtpPacket.seqNum()
-                    print("Current Seq Num: " + str(currSeqNbr))
-                    print("Size of packet: " + str(len(rtpPacket.getPayload())))
 
-                    if currSeqNbr >= self.frameNbr: # Discard the late packet
-                        print("Save data on RAM buffer")
+                    if currSeqNbr > self.frameNbr: # Discard the late packet
                         self.frameNbr = currSeqNbr
                         buffer.append(rtpPacket.getPayload())
 
@@ -249,12 +255,10 @@ class Client:
                         self.state = self.PLAYING
                     elif self.requestSent == self.PAUSE:
                         self.state = self.READY
-                        
                         # The play thread exits. A new thread is created on resume.
                         self.playEvent.set()
                     elif self.requestSent == self.TEARDOWN:
                         self.state = self.INIT
-                        
                         # Flag the teardownAcked to close the socket.
                         self.teardownAcked = 1 
     
