@@ -1,0 +1,23 @@
+\babel@toc {english}{}\relax 
+\contentsline {chapter}{\numberline {1}Introduction and Specifications}{1}{chapter.1}%
+\contentsline {section}{\numberline {1.1}Project Overview}{1}{section.1.1}%
+\contentsline {section}{\numberline {1.2}Group Members and Task Allocation}{1}{section.1.2}%
+\contentsline {subsection}{\numberline {1.2.1}Work Division}{2}{subsection.1.2.1}%
+\contentsline {chapter}{\numberline {2}System Architecture and Protocol Design}{3}{chapter.2}%
+\contentsline {section}{\numberline {2.1}RTSP State Machine and Control Signalling}{3}{section.2.1}%
+\contentsline {section}{\numberline {2.2}RTP Packetization and UDP Fragmentation}{4}{section.2.2}%
+\contentsline {section}{\numberline {2.3}Reliable Frame-by-Frame TCP Media Stream}{4}{section.2.3}%
+\contentsline {section}{\numberline {2.4}Client-Side Caching and SD/HD Switching}{4}{section.2.4}%
+\contentsline {chapter}{\numberline {3}Code Implementation Details}{6}{chapter.3}%
+\contentsline {section}{\numberline {3.1}High-Performance Server I/O Multiplexing}{6}{section.3.1}%
+\contentsline {section}{\numberline {3.2}RTP Packetization and UDP Fragmentation}{7}{section.3.2}%
+\contentsline {section}{\numberline {3.3}Reliable TCP Stream Framing Protocol}{7}{section.3.3}%
+\contentsline {subsection}{\numberline {3.3.1}Server-side Transmission}{7}{subsection.3.3.1}%
+\contentsline {subsection}{\numberline {3.3.2}Client-side Reception}{8}{subsection.3.3.2}%
+\contentsline {section}{\numberline {3.4}Client-Side Quality Switch Engine}{8}{section.3.4}%
+\contentsline {section}{\numberline {3.5}Server-Side Frame Up-Scaling}{9}{section.3.5}%
+\contentsline {chapter}{\numberline {4}Verification and Experimental Results}{10}{chapter.4}%
+\contentsline {section}{\numberline {4.1}UDP Mode and MTU Fragmentation Tests}{10}{section.4.1}%
+\contentsline {section}{\numberline {4.2}TCP Mode and Frame-by-Frame Handshake}{10}{section.4.2}%
+\contentsline {section}{\numberline {4.3}SD/HD Quality Switch and Caching Verification}{11}{section.4.3}%
+\contentsline {chapter}{\numberline {5}Conclusion}{12}{chapter.5}%

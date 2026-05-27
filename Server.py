@@ -28,6 +28,13 @@ class Server:
                     
             except Exception as e:
                 print(f"Cleaning up disconnected client: {e}")
+                try:
+                    self.selectors.unregister(clientSocket)
+                except:
+                    pass
+                clientSocket.close()
+                if clientSocket in self.serverWorkers:
+                    del self.serverWorkers[clientSocket]
                     
     def main(self):
         try:

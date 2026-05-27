@@ -37,7 +37,18 @@ class Client:
         self.connectToServer()
         self.frameNbr = -1
         self.transport = "UDP"
+        self.quality = "SD"
         self.rtpConnection = None
+        self.frameBuffer = []
+        # NOTE: Handle buffer access UI and network
+        self.bufferLock = threading.Lock()
+        self.minBufferSize = 15
+        self.isBuffering = True
+
+        # NOTE: Set up again request 
+        self.isDraining = False
+        self.pendingSetup = False
+        self.pendingPause = False
         
     def createWidgets(self):
         """Build GUI."""
@@ -70,14 +81,39 @@ class Client:
         self.label.grid(row=0, column=0, columnspan=4, sticky=W+E+N+S, padx=5, pady=5) 
     
     def setupMovie(self):
-        """Setup button handler."""
+        """Setup button handler - Đã thêm cấu hình xử lý riêng cho trạng thái PAUSE (READY)"""
         if self.state == self.INIT:
-            self.chooseTransport()
+            self.chooseQuality()
 
-    def chooseTransport(self):
-        # Create a beautiful modal window to choose transport
-        self.transport_window = Toplevel(self.master)
-        self.transport_window.title("Transport Protocol")
+        elif self.state == self.PLAYING:
+            if tkMessageBox.askokcancel("Reset Video?", "Do you want to stop current playback and setup from the beginning?"):
+                self.pendingSetup = True
+                self.startDrainingPipeline() 
+
+        elif self.state == self.READY:
+            if tkMessageBox.askokcancel("Reset Video?", "Do you want to clear buffer and setup from the beginning?"):
+                if hasattr(self, 'playEvent'):
+                    self.playEvent.set()  # Signal play thread to stop
+                with self.bufferLock:
+                    self.frameBuffer.clear()  # Clear buffer immediately
+                self.state = self.INIT
+                self.isBuffering = True
+                self.isDraining = False
+                self.pendingSetup = False
+                self.frameNbr = -1
+                self.chooseQuality()     
+
+    def startDrainingPipeline(self):
+        print("Stop network stream, draining remaining buffered frames to UI.")
+        if hasattr(self, 'playEvent'):
+            self.playEvent.set()  # Signal play thread to stop
+        self.isDraining = True
+        self.state = self.PLAYING
+
+    def chooseQuality(self):
+        # Create a beautiful modal window to choose quality
+        self.quality_window = Toplevel(self.master)
+        self.quality_window.title("Video Quality")
         
         # Center the pop-up on the screen
         w, h = 320, 160
@@ -85,31 +121,31 @@ class Client:
         hs = self.master.winfo_screenheight()
         x = (ws/2) - (w/2)
         y = (hs/2) - (h/2)
-        self.transport_window.geometry('%dx%d+%d+%d' % (w, h, x, y))
-        self.transport_window.resizable(False, False)
+        self.quality_window.geometry('%dx%d+%d+%d' % (w, h, x, y))
+        self.quality_window.resizable(False, False)
         
         # Apply premium look/styling
-        self.transport_window.configure(bg="#1E1E1E")
+        self.quality_window.configure(bg="#1E1E1E")
         
         title_label = Label(
-            self.transport_window, 
-            text="Choose Transport Protocol", 
+            self.quality_window, 
+            text="Choose Video Quality", 
             fg="#FFFFFF", 
             bg="#1E1E1E", 
             font=("Helvetica", 12, "bold")
         )
         title_label.pack(pady=12)
         
-        self.transport_var = StringVar(value="UDP")
+        self.quality_var = StringVar(value="SD")
         
-        frame = Frame(self.transport_window, bg="#1E1E1E")
+        frame = Frame(self.quality_window, bg="#1E1E1E")
         frame.pack()
         
-        rb_udp = Radiobutton(
+        rb_sd = Radiobutton(
             frame, 
-            text="UDP (Standard)", 
-            variable=self.transport_var, 
-            value="UDP", 
+            text="SD (720p) - UDP", 
+            variable=self.quality_var, 
+            value="SD", 
             fg="#E0E0E0", 
             bg="#1E1E1E", 
             selectcolor="#2C2C2C",
@@ -117,13 +153,13 @@ class Client:
             activebackground="#1E1E1E",
             font=("Helvetica", 10)
         )
-        rb_udp.pack(anchor=W, pady=2)
+        rb_sd.pack(anchor=W, pady=2)
         
-        rb_tcp = Radiobutton(
+        rb_hd = Radiobutton(
             frame, 
-            text="TCP (Reliable)", 
-            variable=self.transport_var, 
-            value="TCP", 
+            text="HD (1080p) - TCP", 
+            variable=self.quality_var, 
+            value="HD", 
             fg="#E0E0E0", 
             bg="#1E1E1E", 
             selectcolor="#2C2C2C",
@@ -131,13 +167,13 @@ class Client:
             activebackground="#1E1E1E",
             font=("Helvetica", 10)
         )
-        rb_tcp.pack(anchor=W, pady=2)
+        rb_hd.pack(anchor=W, pady=2)
         
         btn_ok = Button(
-            self.transport_window, 
+            self.quality_window, 
             text="OK", 
             width=12, 
-            command=self.confirmTransport,
+            command=self.confirmQuality,
             fg="#FFFFFF",
             bg="#007ACC",
             activeforeground="#FFFFFF",
@@ -148,13 +184,18 @@ class Client:
         btn_ok.pack(pady=12)
         
         # Make dialog modal
-        self.transport_window.transient(self.master)
-        self.transport_window.grab_set()
-        self.master.wait_window(self.transport_window)
+        self.quality_window.transient(self.master)
+        self.quality_window.grab_set()
+        self.master.wait_window(self.quality_window)
 
-    def confirmTransport(self):
-        self.transport = self.transport_var.get()
-        self.transport_window.destroy()
+    def confirmQuality(self):
+        self.quality = self.quality_var.get()
+        if self.quality == "HD":
+            self.transport = "TCP"
+        else:
+            self.transport = "UDP"
+            
+        self.quality_window.destroy()
         self.sendRtspRequest(self.SETUP)
     
     def exitClient(self):
@@ -162,13 +203,15 @@ class Client:
         self.sendRtspRequest(self.TEARDOWN)     
         self.master.destroy() # Close the gui window
         try:
-            os.remove(CACHE_FILE_NAME + str(self.sessionId) + CACHE_FILE_EXT) # Delete the cache image from video
+            os.remove(CACHE_FILE_NAME + self.quality.lower() + "-" + str(self.sessionId) + CACHE_FILE_EXT) # Delete the cache image from video
         except:
             pass
 
     def pauseMovie(self):
         """Pause button handler."""
         if self.state == self.PLAYING:
+            self.pendingPause = True 
+            self.isDraining = True
             self.sendRtspRequest(self.PAUSE)
     
     def playMovie(self):
@@ -182,7 +225,12 @@ class Client:
             # Now safe to create new event and thread
             self.playEvent = threading.Event()
             self.playEvent.clear()
-            
+        
+            with self.bufferLock:
+                self.frameBuffer.clear()  # Clear buffer when starting new playback
+            self.isBuffering = True
+            self.frameNbr = -1  # Reset frame number for new playback
+
             if self.transport == 'UDP':
                 self._rtpThread = threading.Thread(target=self.listenRtpWithUDP)
             else:
@@ -191,10 +239,52 @@ class Client:
             self._rtpThread.start()
             self.sendRtspRequest(self.PLAY)
             
+            # Start UI clock play loop to render frames from buffer
+            self.master.after(120, self.renderClientBufferLoop)  
+
+    def renderClientBufferLoop(self):
+        """ Render frames from buffer using clock """
+        if self.state != self.PLAYING and not self.isDraining:
+            return
+
+        with self.bufferLock:
+            if self.isBuffering and not self.isDraining:
+                if len(self.frameBuffer) >= self.minBufferSize:
+                    self.isBuffering = False
+                else: 
+                    self.master.after(40, self.renderClientBufferLoop)  # Check again after 40ms
+                    return
+
+            if len(self.frameBuffer) > 0:
+                frame_bytes = self.frameBuffer.pop(0)
+                self.updateMovie(self.writeFrame(frame_bytes))
+            else:
+                if self.isDraining:  
+                    print("Buffer completely drained. Stopping playback.")
+                    self.isDraining = False
+                    self.state = self.INIT
+                    self.frameNbr = -1
+                    if self.pendingPause:
+                        self.pendingPause = False
+                        self.state = self.READY
+                        self.sendRtspRequest(self.PAUSE)
+
+                    elif self.pendingSetup:
+                        self.pendingSetup = False
+                        self.state = self.INIT
+                        self.chooseQuality()                 
+                    return
+                else:
+                    self.isBuffering = True
+                    self.master.after(40, self.renderClientBufferLoop)  
+                    return
+                
+        self.master.after(40, self.renderClientBufferLoop)  # Schedule next frame render after 40ms (25fps)
+                    
     def listenRtpWithUDP(self):        
         """Listen for RTP packets using UDP"""
         buffer = []
-        while True:
+        while not self.playEvent.isSet():
             try:
                 data = self.rtpSocket.recv(2000)
                 if data:
@@ -211,8 +301,13 @@ class Client:
 
                         if rtpPacket.marker() == 1:
                             fullFrame = b''.join(buffer)
-                            self.updateMovie(self.writeFrame(fullFrame))
                             buffer.clear()
+
+                            with self.bufferLock:
+                                self.frameBuffer.append(fullFrame)
+                                if len(self.frameBuffer) > 100:
+                                    self.frameBuffer.pop(0)  # Discard oldest frame if buffer exceeds size
+
             except:
                 buffer.clear()
                 # Stop listening upon requesting PAUSE or TEARDOWN
@@ -241,7 +336,7 @@ class Client:
             print(f"RTP/TCP accept failed or timed out: {e}")
             return
 
-        while True:
+        while not self.playEvent.isSet():
             try:
                 # Read 5-byte length prefix (ASCII string)
                 length_bytes = self.recv_all(self.rtpConnection, 5)
@@ -249,13 +344,16 @@ class Client:
                     break
                 length = int(length_bytes.decode())
                 data = self.recv_all(self.rtpConnection, length)
+                print("Received Frame over TCP")
+                print("Size of packet: " + str(len(data)))
+
                 if not data:
                     break
 
-                if data:
-                    print("Received Frame over TCP")
-                    print("Size of packet: " + str(len(data)))
-                    self.updateMovie(self.writeFrame(data))
+                with self.bufferLock:
+                    self.frameBuffer.append(data)
+                    if len(self.frameBuffer) > 100:
+                        self.frameBuffer.pop(0)  # Discard oldest frame if buffer exceeds size
             except:
                 # Stop listening upon requesting PAUSE or TEARDOWN
                 if self.playEvent.isSet(): 
@@ -301,7 +399,7 @@ class Client:
                     
     def writeFrame(self, data):
         """Write the received frame to a temp image file. Return the image file."""
-        cachename = CACHE_FILE_NAME + str(self.sessionId) + CACHE_FILE_EXT
+        cachename = CACHE_FILE_NAME + self.quality.lower() + "-" + str(self.sessionId) + CACHE_FILE_EXT
         file = open(cachename, "wb")
         file.write(data)
         file.close()
@@ -325,7 +423,7 @@ class Client:
     def sendRtspRequest(self, requestCode):
         """Send RTSP request to the server."""  
         # Setup request
-        if requestCode == self.SETUP and self.state == self.INIT:
+        if requestCode == self.SETUP:
             threading.Thread(target=self.recvRtspReply).start()
             # Update RTSP sequence number.
             self.rtspSeq += 1
@@ -394,7 +492,7 @@ class Client:
         """Parse the RTSP reply from the server."""
         lines = data.split('\n')
         seqNum = int(lines[1].split(' ')[1])
-        
+        print("Received RTSP reply: " + data)
         # Process only if the server reply's sequence number is the same as the request's
         if seqNum == self.rtspSeq:
             session = int(lines[2].split(' ')[1])
@@ -423,7 +521,14 @@ class Client:
                         self.teardownAcked = 1 
     
     def openRtpPort(self):
-        """Open RTP socket binded to a specified port."""
+        """Clean up port & Open RTP socket binded to a specified port."""
+        if hasattr(self, 'rtpSocket') and self.rtpSocket:
+            try: 
+                self.rtpSocket.shutdown(socket.SHUT_RDWR)
+                self.rtpSocket.close()
+            except:
+                pass
+
         if self.transport == 'UDP':
             self.rtpSocket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
             self.rtpSocket.settimeout(0.5)
