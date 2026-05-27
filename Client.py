@@ -39,6 +39,10 @@ class Client:
         self.transport = "UDP"
         self.quality = "SD"
         self.rtpConnection = None
+        self.frameBuffer = []
+        self.bufferLock = threading.Lock()
+        self.minBufferSize = 5
+        self.isBuffering = True
         
     def createWidgets(self):
         """Build GUI."""
@@ -197,6 +201,28 @@ class Client:
             self._rtpThread.start()
             self.sendRtspRequest(self.PLAY)
             
+            # Start UI clock play loop to render frames from buffer
+            self.master.after(120, self.renderClientBufferLoop)  
+
+    def renderClientBufferLoop(self):
+        """ Render frames from buffer using clock """
+        if self.state != self.PLAYING or self.playEvent.isSet():
+            return
+        with self.bufferLock:
+            if self.isBuffering:
+                if len(self.frameBuffer) >= self.minBufferSize:
+                    self.isBuffering = False
+                else: 
+                    self.master.after(40, self.renderClientBufferLoop)  # Check again after 40ms
+                    return
+
+            if len(self.frameBuffer) > 0:
+                frame_bytes = self.frameBuffer.pop(0)
+                self.updateMovie(self.writeFrame(frame_bytes))
+            else:
+                self.isBuffering = True
+        self.master.after(40, self.renderClientBufferLoop)  # Schedule next frame render after 40ms (25fps)
+                    
     def listenRtpWithUDP(self):        
         """Listen for RTP packets using UDP"""
         buffer = []
@@ -217,8 +243,13 @@ class Client:
 
                         if rtpPacket.marker() == 1:
                             fullFrame = b''.join(buffer)
-                            self.updateMovie(self.writeFrame(fullFrame))
                             buffer.clear()
+
+                            with self.bufferLock:
+                                self.frameBuffer.append(fullFrame)
+                                if len(self.frameBuffer) > 30:
+                                    self.frameBuffer.pop(0)  # Discard oldest frame if buffer exceeds size
+
             except:
                 buffer.clear()
                 # Stop listening upon requesting PAUSE or TEARDOWN
@@ -255,13 +286,16 @@ class Client:
                     break
                 length = int(length_bytes.decode())
                 data = self.recv_all(self.rtpConnection, length)
+                print("Received Frame over TCP")
+                print("Size of packet: " + str(len(data)))
+
                 if not data:
                     break
 
-                if data:
-                    print("Received Frame over TCP")
-                    print("Size of packet: " + str(len(data)))
-                    self.updateMovie(self.writeFrame(data))
+                with self.bufferLock:
+                    self.frameBuffer.append(data)
+                    if len(self.frameBuffer) > 30:
+                        self.frameBuffer.pop(0)  # Discard oldest frame if buffer exceeds size
             except:
                 # Stop listening upon requesting PAUSE or TEARDOWN
                 if self.playEvent.isSet(): 
