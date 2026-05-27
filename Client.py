@@ -79,14 +79,27 @@ class Client:
         self.label.grid(row=0, column=0, columnspan=4, sticky=W+E+N+S, padx=5, pady=5) 
     
     def setupMovie(self):
-        """Setup button handler."""
+        """Setup button handler - Đã thêm cấu hình xử lý riêng cho trạng thái PAUSE (READY)"""
         if self.state == self.INIT:
             self.chooseQuality()
 
-        elif self.state in [self.READY, self.PLAYING]:
+        elif self.state == self.PLAYING:
             if tkMessageBox.askokcancel("Reset Video?", "Do you want to stop current playback and setup from the beginning?"):
                 self.pendingSetup = True
-                self.startDrainingPipeline()
+                self.startDrainingPipeline() 
+
+        elif self.state == self.READY:
+            if tkMessageBox.askokcancel("Reset Video?", "Do you want to clear buffer and setup from the beginning?"):
+                if hasattr(self, 'playEvent'):
+                    self.playEvent.set()  # Signal play thread to stop
+                with self.bufferLock:
+                    self.frameBuffer.clear()  # Clear buffer immediately
+                self.state = self.INIT
+                self.isBuffering = True
+                self.isDraining = False
+                self.pendingSetup = False
+                self.frameNbr = -1
+                self.chooseQuality()     
 
     def startDrainingPipeline(self):
         print("Stop network stream, draining remaining buffered frames to UI.")
@@ -208,7 +221,12 @@ class Client:
             # Now safe to create new event and thread
             self.playEvent = threading.Event()
             self.playEvent.clear()
-            
+        
+            with self.bufferLock:
+                self.frameBuffer.clear()  # Clear buffer when starting new playback
+            self.isBuffering = True
+            self.frameNbr = -1  # Reset frame number for new playback
+
             if self.transport == 'UDP':
                 self._rtpThread = threading.Thread(target=self.listenRtpWithUDP)
             else:
@@ -246,11 +264,11 @@ class Client:
                     if self.pendingSetup:
                         self.pendingSetup = False
                         self.chooseQuality()                 
-                        return
-                    else:
-                        self.isBuffering = True
-                        self.master.after(40, self.renderClientBufferLoop)  
-                        return
+                    return
+                else:
+                    self.isBuffering = True
+                    self.master.after(40, self.renderClientBufferLoop)  
+                    return
                 
         self.master.after(40, self.renderClientBufferLoop)  # Schedule next frame render after 40ms (25fps)
                     
