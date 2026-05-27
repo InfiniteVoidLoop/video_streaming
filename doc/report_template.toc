@@ -1,23 +1,34 @@
 \babel@toc {english}{}\relax 
 \contentsline {chapter}{\numberline {1}Introduction and Specifications}{1}{chapter.1}%
 \contentsline {section}{\numberline {1.1}Project Overview}{1}{section.1.1}%
-\contentsline {section}{\numberline {1.2}Group Members and Task Allocation}{1}{section.1.2}%
+\contentsline {section}{\numberline {1.2}Group Members and Task Allocation}{2}{section.1.2}%
 \contentsline {subsection}{\numberline {1.2.1}Work Division}{2}{subsection.1.2.1}%
 \contentsline {chapter}{\numberline {2}System Architecture and Protocol Design}{3}{chapter.2}%
 \contentsline {section}{\numberline {2.1}RTSP State Machine and Control Signalling}{3}{section.2.1}%
+\contentsline {subsection}{\numberline {2.1.1}Extended SETUP for Transport Negotiation}{3}{subsection.2.1.1}%
+\contentsline {subsection}{\numberline {2.1.2}Re-SETUP for Quality Switching}{4}{subsection.2.1.2}%
 \contentsline {section}{\numberline {2.2}RTP Packetization and UDP Fragmentation}{4}{section.2.2}%
 \contentsline {section}{\numberline {2.3}Reliable Frame-by-Frame TCP Media Stream}{4}{section.2.3}%
-\contentsline {section}{\numberline {2.4}Client-Side Caching and SD/HD Switching}{4}{section.2.4}%
+\contentsline {subsection}{\numberline {2.3.1}TCP Connection Establishment}{5}{subsection.2.3.1}%
+\contentsline {section}{\numberline {2.4}Client-Side Caching and Jitter Buffer}{5}{section.2.4}%
+\contentsline {section}{\numberline {2.5}Setup Again: Draining Pipeline and Stream Reset}{5}{section.2.5}%
 \contentsline {chapter}{\numberline {3}Code Implementation Details}{6}{chapter.3}%
 \contentsline {section}{\numberline {3.1}High-Performance Server I/O Multiplexing}{6}{section.3.1}%
-\contentsline {section}{\numberline {3.2}RTP Packetization and UDP Fragmentation}{7}{section.3.2}%
-\contentsline {section}{\numberline {3.3}Reliable TCP Stream Framing Protocol}{7}{section.3.3}%
-\contentsline {subsection}{\numberline {3.3.1}Server-side Transmission}{7}{subsection.3.3.1}%
-\contentsline {subsection}{\numberline {3.3.2}Client-side Reception}{8}{subsection.3.3.2}%
-\contentsline {section}{\numberline {3.4}Client-Side Quality Switch Engine}{8}{section.3.4}%
-\contentsline {section}{\numberline {3.5}Server-Side Frame Up-Scaling}{9}{section.3.5}%
-\contentsline {chapter}{\numberline {4}Verification and Experimental Results}{10}{chapter.4}%
-\contentsline {section}{\numberline {4.1}UDP Mode and MTU Fragmentation Tests}{10}{section.4.1}%
-\contentsline {section}{\numberline {4.2}TCP Mode and Frame-by-Frame Handshake}{10}{section.4.2}%
-\contentsline {section}{\numberline {4.3}SD/HD Quality Switch and Caching Verification}{11}{section.4.3}%
-\contentsline {chapter}{\numberline {5}Conclusion}{12}{chapter.5}%
+\contentsline {subsection}{\numberline {3.1.1}Non-blocking Socket and BlockingIOError Handling}{7}{subsection.3.1.1}%
+\contentsline {subsection}{\numberline {3.1.2}Graceful Client Disconnection Cleanup}{7}{subsection.3.1.2}%
+\contentsline {section}{\numberline {3.2}RTP Packetization and Binary Header Encoding}{7}{section.3.2}%
+\contentsline {section}{\numberline {3.3}UDP Fragmentation Logic}{8}{section.3.3}%
+\contentsline {subsection}{\numberline {3.3.1}Client-Side UDP Reassembly}{9}{subsection.3.3.1}%
+\contentsline {section}{\numberline {3.4}Reliable TCP Stream Framing Protocol}{9}{section.3.4}%
+\contentsline {subsection}{\numberline {3.4.1}Server-side Transmission}{9}{subsection.3.4.1}%
+\contentsline {subsection}{\numberline {3.4.2}Client-side Reception}{10}{subsection.3.4.2}%
+\contentsline {section}{\numberline {3.5}Client-Side Jitter Buffer and Render Loop}{11}{section.3.5}%
+\contentsline {section}{\numberline {3.6}Setup Again: Server-Side Re-SETUP Handler}{12}{section.3.6}%
+\contentsline {section}{\numberline {3.7}Client-Side Quality Selection UI}{12}{section.3.7}%
+\contentsline {chapter}{\numberline {4}Verification and Experimental Results}{14}{chapter.4}%
+\contentsline {section}{\numberline {4.1}UDP Mode and MTU Fragmentation Tests}{14}{section.4.1}%
+\contentsline {section}{\numberline {4.2}TCP Mode and Frame-by-Frame Delivery}{14}{section.4.2}%
+\contentsline {section}{\numberline {4.3}Client-Side Jitter Buffer Verification}{15}{section.4.3}%
+\contentsline {section}{\numberline {4.4}Setup Again / Quality Switch Verification}{15}{section.4.4}%
+\contentsline {section}{\numberline {4.5}I/O Multiplexing Scalability}{15}{section.4.5}%
+\contentsline {chapter}{\numberline {5}Conclusion}{16}{chapter.5}%
