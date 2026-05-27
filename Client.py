@@ -42,11 +42,13 @@ class Client:
         self.frameBuffer = []
         # NOTE: Handle buffer access UI and network
         self.bufferLock = threading.Lock()
-        self.minBufferSize = 30
+        self.minBufferSize = 15
         self.isBuffering = True
+
         # NOTE: Set up again request 
         self.isDraining = False
         self.pendingSetup = False
+        self.pendingPause = False
         
     def createWidgets(self):
         """Build GUI."""
@@ -208,6 +210,8 @@ class Client:
     def pauseMovie(self):
         """Pause button handler."""
         if self.state == self.PLAYING:
+            self.pendingPause = True 
+            self.isDraining = True
             self.sendRtspRequest(self.PAUSE)
     
     def playMovie(self):
@@ -260,9 +264,14 @@ class Client:
                     self.isDraining = False
                     self.state = self.INIT
                     self.frameNbr = -1
-                    
-                    if self.pendingSetup:
+                    if self.pendingPause:
+                        self.pendingPause = False
+                        self.state = self.READY
+                        self.sendRtspRequest(self.PAUSE)
+
+                    elif self.pendingSetup:
                         self.pendingSetup = False
+                        self.state = self.INIT
                         self.chooseQuality()                 
                     return
                 else:
