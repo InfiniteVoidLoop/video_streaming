@@ -396,7 +396,7 @@ class Client:
     def sendRtspRequest(self, requestCode):
         """Send RTSP request to the server."""  
         # Setup request
-        if requestCode == self.SETUP and self.state == self.INIT:
+        if requestCode == self.SETUP:
             threading.Thread(target=self.recvRtspReply).start()
             # Update RTSP sequence number.
             self.rtspSeq += 1
@@ -465,7 +465,7 @@ class Client:
         """Parse the RTSP reply from the server."""
         lines = data.split('\n')
         seqNum = int(lines[1].split(' ')[1])
-        
+        print("Received RTSP reply: " + data)
         # Process only if the server reply's sequence number is the same as the request's
         if seqNum == self.rtspSeq:
             session = int(lines[2].split(' ')[1])
@@ -494,7 +494,14 @@ class Client:
                         self.teardownAcked = 1 
     
     def openRtpPort(self):
-        """Open RTP socket binded to a specified port."""
+        """Clean up port & Open RTP socket binded to a specified port."""
+        if hasattr(self, 'rtpSocket') and self.rtpSocket:
+            try: 
+                self.rtpSocket.shutdown(socket.SHUT_RDWR)
+                self.rtpSocket.close()
+            except:
+                pass
+
         if self.transport == 'UDP':
             self.rtpSocket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
             self.rtpSocket.settimeout(0.5)

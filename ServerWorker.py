@@ -20,7 +20,7 @@ class ServerWorker:
     OK_200 = 0
     FILE_NOT_FOUND_404 = 1
     CON_ERR_500 = 2
-    
+
     clientInfo = {}
     rtpSeq = 0 
     def __init__(self, clientInfo):
@@ -59,34 +59,47 @@ class ServerWorker:
         
         # Process SETUP request
         if requestType == self.SETUP:
-            if self.state == self.INIT:
-                # Update state
-                print("processing SETUP\n")
+            print("processing SETUP\n")
+            if 'event' in self.clientInfo and self.clientInfo['event']:
+                try: self.clientInfo['event'].set()
+                except: pass
                 
-                try:
-                    self.clientInfo['videoStream'] = VideoStream(filename)
-                    self.state = self.READY
-                except IOError:
-                    self.replyRtsp(self.FILE_NOT_FOUND_404, seq[1])
+            if 'worker' in self.clientInfo and self.clientInfo['worker']:
+                try: self.clientInfo['worker'].join(timeout=0.2)
+                except: pass
                 
-                # Generate a randomized RTSP session ID
+            if 'rtpSocket' in self.clientInfo and self.clientInfo['rtpSocket']:
+                try: self.clientInfo['rtpSocket'].close()
+                except: pass            
+            print("Cleaned up previous session resources")
+            
+            try:
+                self.clientInfo['videoStream'] = VideoStream(filename)
+                self.state = self.READY
+            except IOError:
+                self.replyRtsp(self.FILE_NOT_FOUND_404, seq[1])
+
+            self.rtpSeq = 0
+            # Generate a randomized RTSP session ID
+            if self.clientInfo.get('session') is None:
                 self.clientInfo['session'] = randint(100000, 999999)
                 
-                # Send RTSP reply
-                self.replyRtsp(self.OK_200, seq[1])
+            # Send RTSP reply
+            self.replyRtsp(self.OK_200, seq[1])
                 
-                # Parse Transport header
-                transport_line = request[2]
-                self.clientInfo['transport'] = 'UDP'
-                if 'TCP' in transport_line:
-                    self.clientInfo['transport'] = 'TCP'
+            # Parse Transport header
+            transport_line = request[2]
+            self.clientInfo['transport'] = 'UDP'
+            if 'TCP' in transport_line:
+                self.clientInfo['transport'] = 'TCP'
                 
                 # Extract client_port robustly
-                parts = transport_line.split(';')
-                for part in parts:
-                    if 'client_port' in part:
-                        self.clientInfo['rtpPort'] = part.split('=')[1].strip()
-                        break
+            parts = transport_line.split(';')
+            for part in parts:
+                if 'client_port' in part:
+                    self.clientInfo['rtpPort'] = part.split('=')[1].strip()
+                    print("Successfully parsed client_port: " + self.clientInfo['rtpPort'])
+                    break
                         
         # Process PLAY request      
         elif requestType == self.PLAY:
