@@ -40,9 +40,13 @@ class Client:
         self.quality = "SD"
         self.rtpConnection = None
         self.frameBuffer = []
+        # NOTE: Handle buffer access UI and network
         self.bufferLock = threading.Lock()
-        self.minBufferSize = 5
+        self.minBufferSize = 30
         self.isBuffering = True
+        # NOTE: Set up again request 
+        self.isDraining = False
+        self.pendingSetup = False
         
     def createWidgets(self):
         """Build GUI."""
@@ -78,6 +82,18 @@ class Client:
         """Setup button handler."""
         if self.state == self.INIT:
             self.chooseQuality()
+
+        elif self.state in [self.READY, self.PLAYING]:
+            if tkMessageBox.askokcancel("Reset Video?", "Do you want to stop current playback and setup from the beginning?"):
+                self.pendingSetup = True
+                self.startDrainingPipeline()
+
+    def startDrainingPipeline(self):
+        print("Stop network stream, draining remaining buffered frames to UI.")
+        if hasattr(self, 'playEvent'):
+            self.playEvent.set()  # Signal play thread to stop
+        self.isDraining = True
+        self.state = self.PLAYING
 
     def chooseQuality(self):
         # Create a beautiful modal window to choose quality
@@ -206,10 +222,11 @@ class Client:
 
     def renderClientBufferLoop(self):
         """ Render frames from buffer using clock """
-        if self.state != self.PLAYING or self.playEvent.isSet():
+        if self.state != self.PLAYING and not self.isDraining:
             return
+
         with self.bufferLock:
-            if self.isBuffering:
+            if self.isBuffering and not self.isDraining:
                 if len(self.frameBuffer) >= self.minBufferSize:
                     self.isBuffering = False
                 else: 
@@ -220,13 +237,27 @@ class Client:
                 frame_bytes = self.frameBuffer.pop(0)
                 self.updateMovie(self.writeFrame(frame_bytes))
             else:
-                self.isBuffering = True
+                if self.isDraining:  
+                    print("Buffer completely drained. Stopping playback.")
+                    self.isDraining = False
+                    self.state = self.INIT
+                    self.frameNbr = -1
+                    
+                    if self.pendingSetup:
+                        self.pendingSetup = False
+                        self.chooseQuality()                 
+                        return
+                    else:
+                        self.isBuffering = True
+                        self.master.after(40, self.renderClientBufferLoop)  
+                        return
+                
         self.master.after(40, self.renderClientBufferLoop)  # Schedule next frame render after 40ms (25fps)
                     
     def listenRtpWithUDP(self):        
         """Listen for RTP packets using UDP"""
         buffer = []
-        while True:
+        while not self.playEvent.isSet():
             try:
                 data = self.rtpSocket.recv(2000)
                 if data:
@@ -247,7 +278,7 @@ class Client:
 
                             with self.bufferLock:
                                 self.frameBuffer.append(fullFrame)
-                                if len(self.frameBuffer) > 30:
+                                if len(self.frameBuffer) > 100:
                                     self.frameBuffer.pop(0)  # Discard oldest frame if buffer exceeds size
 
             except:
@@ -278,7 +309,7 @@ class Client:
             print(f"RTP/TCP accept failed or timed out: {e}")
             return
 
-        while True:
+        while not self.playEvent.isSet():
             try:
                 # Read 5-byte length prefix (ASCII string)
                 length_bytes = self.recv_all(self.rtpConnection, 5)
@@ -294,7 +325,7 @@ class Client:
 
                 with self.bufferLock:
                     self.frameBuffer.append(data)
-                    if len(self.frameBuffer) > 30:
+                    if len(self.frameBuffer) > 100:
                         self.frameBuffer.pop(0)  # Discard oldest frame if buffer exceeds size
             except:
                 # Stop listening upon requesting PAUSE or TEARDOWN
