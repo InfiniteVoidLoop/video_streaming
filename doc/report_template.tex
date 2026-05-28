@@ -661,6 +661,96 @@ Size of packet: 1173
 \end{lstlisting}
 This log demonstrates that a single frame of approximately 3985 payload bytes was successfully fragmented into two maximal chunks of 1400 payload bytes (plus 12 bytes RTP header, totalling 1412 bytes per packet) and a final chunk of 1161 payload bytes. The marker bit on the third packet triggered the client's buffer join, producing a valid JPEG that rendered correctly in the GUI.
 
+\section{RTSP Control Flow and Packet Capture Analysis}
+To visually validate the implementation of the RTSP state machine and RTP transmission loop under UDP mode, we captured the control packets and user interface transitions. This section illustrates the step-by-step transaction flow, showing both the client-side terminal captures and server-side connection logs.
+
+\subsection{SETUP State and Quality Selection}
+The communication session begins when the user triggers a setup operation. Figure~\ref{fig:setup_ui} illustrates the standard-definition (SD) selection dialog in the custom Tkinter GUI, followed by the RTSP SETUP handshake exchange. The client requests UDP transport, and the server acknowledges by allocating the necessary media port and generating a unique session ID (Figures~\ref{fig:setup_client} and \ref{fig:setup_server}).
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.45\textwidth]{assets/setup_ui_udp.png}
+    \caption{Client Setup Dialog for Quality and Transport Selection (SD/UDP)}
+    \label{fig:setup_ui}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \begin{minipage}{0.48\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{assets/setup_packet_client.png}
+        \caption{Client RTSP SETUP Request Packet Log}
+        \label{fig:setup_client}
+    \end{minipage}
+    \hfill
+    \begin{minipage}{0.48\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{assets/setup_packet_server.png}
+        \caption{Server-Side RTSP SETUP Handshake Processing}
+        \label{fig:setup_server}
+    \end{minipage}
+\end{figure}
+
+\subsection{PLAY State and Media Flow}
+Once the session is established in the READY state, clicking the "Play" button shifts the client and server into the PLAYING state. Figure~\ref{fig:play_client} displays the RTSP PLAY request and the subsequent client-side reception log, verifying the arrival of packetized RTP data blocks. Figure~\ref{fig:play_server} shows the corresponding server-side acknowledgment.
+
+\begin{figure}[H]
+    \centering
+    \begin{minipage}{0.48\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{assets/play_packet_client_udp.png}
+        \caption{Client RTSP PLAY Transmission and RTP Packet Reception Log}
+        \label{fig:play_client}
+    \end{minipage}
+    \hfill
+    \begin{minipage}{0.48\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{assets/play_packet_server.png}
+        \caption{Server RTSP PLAY Acknowledgment Log}
+        \label{fig:play_server}
+    \end{minipage}
+\end{figure}
+
+\subsection{PAUSE State}
+When the user pauses the playback, the client sends an RTSP PAUSE request. The server stops the RTP sending thread, transitions its worker state back to READY, and acknowledges the command (Figures~\ref{fig:pause_client} and \ref{fig:pause_server}). The client immediately suspends its render loop while retaining its accumulated frames in the jitter buffer, avoiding playback delays on resume.
+
+\begin{figure}[H]
+    \centering
+    \begin{minipage}{0.48\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{assets/pause_packet_client.png}
+        \caption{Client RTSP PAUSE Request Log}
+        \label{fig:pause_client}
+    \end{minipage}
+    \hfill
+    \begin{minipage}{0.48\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{assets/pause_packet_server.png}
+        \caption{Server RTSP PAUSE Processing and Acknowledgment}
+        \label{fig:pause_server}
+    \end{minipage}
+\end{figure}
+
+\subsection{TEARDOWN State and Resource Release}
+Upon terminating the session, the client sends an RTSP TEARDOWN request to clean up all allocated sockets, threads, and UI resources. As illustrated in Figures~\ref{fig:teardown_client} and \ref{fig:teardown_server}, the server shuts down the connection gracefully, unregisters the client from its non-blocking selectors loop, and reclaims all socket descriptors.
+
+\begin{figure}[H]
+    \centering
+    \begin{minipage}{0.48\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{assets/teardown_packet_client.png}
+        \caption{Client RTSP TEARDOWN Command Execution}
+        \label{fig:teardown_client}
+    \end{minipage}
+    \hfill
+    \begin{minipage}{0.48\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{assets/teardown_packet_server.png}
+        \caption{Server TEARDOWN Cleanup and Socket Closure}
+        \label{fig:teardown_server}
+    \end{minipage}
+\end{figure}
+
 \section{TCP Mode and Frame-by-Frame Delivery}
 When TCP mode is selected via the quality dialog (HD option), the server connects to the client's listening socket and delivers frames with the 5-byte ASCII headers. Terminal output verifies the handshake and data integrity:
 \begin{lstlisting}[language=bash, caption=RTSP Setup and TCP Stream verification]
@@ -684,6 +774,25 @@ Received Frame over TCP
 Size of packet: 5925
 \end{lstlisting}
 Each frame is delivered as an uninterrupted single unit without any chunk splits. The \texttt{sendall()} call on the server and the strict \texttt{recv\_all()} loop on the client ensure complete, corruption-free frame delivery. No packet loss or visual tearing was observed during TCP streams.
+
+To verify the transport channel switch, the control flow and packet logs for the HD/TCP mode were captured and illustrated in Figures~\ref{fig:tcp_setup} and \ref{fig:tcp_play}. Figure~\ref{fig:tcp_setup} shows the RTSP SETUP request and response establishing a session over \texttt{RTP/TCP}, confirming that the client creates a TCP media listening socket at port \texttt{25000} which the server actively connects to. Figure~\ref{fig:tcp_play} demonstrates the RTSP PLAY request and the subsequent frame-by-frame transmission, showing that large HD media frames are transmitted smoothly over the reliable TCP socket connection without UDP-like fragmentation or packet reassembly markers.
+
+\begin{figure}[H]
+    \centering
+    \begin{minipage}{0.48\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{assets/tcp_setup.png}
+        \caption{Client-Server RTSP SETUP Handshake for TCP Transport}
+        \label{fig:tcp_setup}
+    \end{minipage}
+    \hfill
+    \begin{minipage}{0.48\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{assets/play_packet_tcp.png}
+        \caption{RTSP PLAY Request and TCP Framing Media Transfer}
+        \label{fig:tcp_play}
+    \end{minipage}
+\end{figure}
 
 \section{Client-Side Jitter Buffer Verification}
 The jitter buffer was tested under the following scenarios:

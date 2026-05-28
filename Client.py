@@ -104,7 +104,7 @@ class Client:
                 self.chooseQuality()     
 
     def startDrainingPipeline(self):
-        print("Stop network stream, draining remaining buffered frames to UI.")
+        # print("Stop network stream, draining remaining buffered frames to UI.")
         if hasattr(self, 'playEvent'):
             self.playEvent.set()  # Signal play thread to stop
         self.isDraining = True
@@ -260,7 +260,7 @@ class Client:
                 self.updateMovie(self.writeFrame(frame_bytes))
             else:
                 if self.isDraining:  
-                    print("Buffer completely drained. Stopping playback.")
+                    # print("Buffer completely drained. Stopping playback.")
                     self.isDraining = False
                     self.state = self.INIT
                     self.frameNbr = -1

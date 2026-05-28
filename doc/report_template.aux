@@ -55,12 +55,40 @@
 \@writefile{lot}{\addvspace {10\p@ }}
 \@writefile{toc}{\contentsline {section}{\numberline {4.1}UDP Mode and MTU Fragmentation Tests}{14}{section.4.1}\protected@file@percent }
 \@writefile{lol}{\contentsline {lstlisting}{\numberline {4.1}{\ignorespaces Client-side terminal output showing UDP fragmentation}}{14}{lstlisting.4.1}\protected@file@percent }
-\@writefile{toc}{\contentsline {section}{\numberline {4.2}TCP Mode and Frame-by-Frame Delivery}{14}{section.4.2}\protected@file@percent }
-\@writefile{lol}{\contentsline {lstlisting}{\numberline {4.2}{\ignorespaces RTSP Setup and TCP Stream verification}}{14}{lstlisting.4.2}\protected@file@percent }
-\@writefile{toc}{\contentsline {section}{\numberline {4.3}Client-Side Jitter Buffer Verification}{15}{section.4.3}\protected@file@percent }
-\@writefile{toc}{\contentsline {section}{\numberline {4.4}Setup Again / Quality Switch Verification}{15}{section.4.4}\protected@file@percent }
-\@writefile{toc}{\contentsline {section}{\numberline {4.5}I/O Multiplexing Scalability}{15}{section.4.5}\protected@file@percent }
-\@writefile{toc}{\contentsline {chapter}{\numberline {5}Conclusion}{16}{chapter.5}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {4.2}RTSP Control Flow and Packet Capture Analysis}{14}{section.4.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.2.1}SETUP State and Quality Selection}{14}{subsection.4.2.1}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {4.1}{\ignorespaces Client Setup Dialog for Quality and Transport Selection (SD/UDP)}}{15}{figure.caption.2}\protected@file@percent }
+\providecommand*\caption@xref[2]{\@setref\relax\@undefined{#1}}
+\newlabel{fig:setup_ui}{{4.1}{15}{Client Setup Dialog for Quality and Transport Selection (SD/UDP)}{figure.caption.2}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {4.2}{\ignorespaces Client RTSP SETUP Request Packet Log}}{15}{figure.caption.3}\protected@file@percent }
+\newlabel{fig:setup_client}{{4.2}{15}{Client RTSP SETUP Request Packet Log}{figure.caption.3}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {4.3}{\ignorespaces Server-Side RTSP SETUP Handshake Processing}}{15}{figure.caption.3}\protected@file@percent }
+\newlabel{fig:setup_server}{{4.3}{15}{Server-Side RTSP SETUP Handshake Processing}{figure.caption.3}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.2.2}PLAY State and Media Flow}{15}{subsection.4.2.2}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {4.4}{\ignorespaces Client RTSP PLAY Transmission and RTP Packet Reception Log}}{15}{figure.caption.4}\protected@file@percent }
+\newlabel{fig:play_client}{{4.4}{15}{Client RTSP PLAY Transmission and RTP Packet Reception Log}{figure.caption.4}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {4.5}{\ignorespaces Server RTSP PLAY Acknowledgment Log}}{15}{figure.caption.4}\protected@file@percent }
+\newlabel{fig:play_server}{{4.5}{15}{Server RTSP PLAY Acknowledgment Log}{figure.caption.4}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.2.3}PAUSE State}{16}{subsection.4.2.3}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {4.6}{\ignorespaces Client RTSP PAUSE Request Log}}{16}{figure.caption.5}\protected@file@percent }
+\newlabel{fig:pause_client}{{4.6}{16}{Client RTSP PAUSE Request Log}{figure.caption.5}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {4.7}{\ignorespaces Server RTSP PAUSE Processing and Acknowledgment}}{16}{figure.caption.5}\protected@file@percent }
+\newlabel{fig:pause_server}{{4.7}{16}{Server RTSP PAUSE Processing and Acknowledgment}{figure.caption.5}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.2.4}TEARDOWN State and Resource Release}{16}{subsection.4.2.4}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {4.8}{\ignorespaces Client RTSP TEARDOWN Command Execution}}{16}{figure.caption.6}\protected@file@percent }
+\newlabel{fig:teardown_client}{{4.8}{16}{Client RTSP TEARDOWN Command Execution}{figure.caption.6}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {4.9}{\ignorespaces Server TEARDOWN Cleanup and Socket Closure}}{16}{figure.caption.6}\protected@file@percent }
+\newlabel{fig:teardown_server}{{4.9}{16}{Server TEARDOWN Cleanup and Socket Closure}{figure.caption.6}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {4.3}TCP Mode and Frame-by-Frame Delivery}{16}{section.4.3}\protected@file@percent }
+\@writefile{lol}{\contentsline {lstlisting}{\numberline {4.2}{\ignorespaces RTSP Setup and TCP Stream verification}}{16}{lstlisting.4.2}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {4.10}{\ignorespaces Client-Server RTSP SETUP Handshake for TCP Transport}}{18}{figure.caption.7}\protected@file@percent }
+\newlabel{fig:tcp_setup}{{4.10}{18}{Client-Server RTSP SETUP Handshake for TCP Transport}{figure.caption.7}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {4.11}{\ignorespaces RTSP PLAY Request and TCP Framing Media Transfer}}{18}{figure.caption.7}\protected@file@percent }
+\newlabel{fig:tcp_play}{{4.11}{18}{RTSP PLAY Request and TCP Framing Media Transfer}{figure.caption.7}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {4.4}Client-Side Jitter Buffer Verification}{18}{section.4.4}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {4.5}Setup Again / Quality Switch Verification}{19}{section.4.5}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {4.6}I/O Multiplexing Scalability}{19}{section.4.6}\protected@file@percent }
+\@writefile{toc}{\contentsline {chapter}{\numberline {5}Conclusion}{20}{chapter.5}\protected@file@percent }
 \@writefile{lof}{\addvspace {10\p@ }}
 \@writefile{lot}{\addvspace {10\p@ }}
-\gdef \@abspage@last{18}
+\gdef \@abspage@last{23}

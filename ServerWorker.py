@@ -71,7 +71,7 @@ class ServerWorker:
             if 'rtpSocket' in self.clientInfo and self.clientInfo['rtpSocket']:
                 try: self.clientInfo['rtpSocket'].close()
                 except: pass            
-            print("Cleaned up previous session resources")
+            # print("Cleaned up previous session resources")
             
             try:
                 self.clientInfo['videoStream'] = VideoStream(filename)
@@ -98,7 +98,7 @@ class ServerWorker:
             for part in parts:
                 if 'client_port' in part:
                     self.clientInfo['rtpPort'] = part.split('=')[1].strip()
-                    print("Successfully parsed client_port: " + self.clientInfo['rtpPort'])
+                    # print("Successfully parsed client_port: " + self.clientInfo['rtpPort'])
                     break
                         
         # Process PLAY request      

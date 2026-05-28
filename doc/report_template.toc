@@ -27,8 +27,13 @@
 \contentsline {section}{\numberline {3.7}Client-Side Quality Selection UI}{12}{section.3.7}%
 \contentsline {chapter}{\numberline {4}Verification and Experimental Results}{14}{chapter.4}%
 \contentsline {section}{\numberline {4.1}UDP Mode and MTU Fragmentation Tests}{14}{section.4.1}%
-\contentsline {section}{\numberline {4.2}TCP Mode and Frame-by-Frame Delivery}{14}{section.4.2}%
-\contentsline {section}{\numberline {4.3}Client-Side Jitter Buffer Verification}{15}{section.4.3}%
-\contentsline {section}{\numberline {4.4}Setup Again / Quality Switch Verification}{15}{section.4.4}%
-\contentsline {section}{\numberline {4.5}I/O Multiplexing Scalability}{15}{section.4.5}%
-\contentsline {chapter}{\numberline {5}Conclusion}{16}{chapter.5}%
+\contentsline {section}{\numberline {4.2}RTSP Control Flow and Packet Capture Analysis}{14}{section.4.2}%
+\contentsline {subsection}{\numberline {4.2.1}SETUP State and Quality Selection}{14}{subsection.4.2.1}%
+\contentsline {subsection}{\numberline {4.2.2}PLAY State and Media Flow}{15}{subsection.4.2.2}%
+\contentsline {subsection}{\numberline {4.2.3}PAUSE State}{16}{subsection.4.2.3}%
+\contentsline {subsection}{\numberline {4.2.4}TEARDOWN State and Resource Release}{16}{subsection.4.2.4}%
+\contentsline {section}{\numberline {4.3}TCP Mode and Frame-by-Frame Delivery}{16}{section.4.3}%
+\contentsline {section}{\numberline {4.4}Client-Side Jitter Buffer Verification}{18}{section.4.4}%
+\contentsline {section}{\numberline {4.5}Setup Again / Quality Switch Verification}{19}{section.4.5}%
+\contentsline {section}{\numberline {4.6}I/O Multiplexing Scalability}{19}{section.4.6}%
+\contentsline {chapter}{\numberline {5}Conclusion}{20}{chapter.5}%
