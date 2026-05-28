@@ -34,6 +34,6 @@
 \contentsline {subsection}{\numberline {4.2.4}TEARDOWN State and Resource Release}{16}{subsection.4.2.4}%
 \contentsline {section}{\numberline {4.3}TCP Mode and Frame-by-Frame Delivery}{16}{section.4.3}%
 \contentsline {section}{\numberline {4.4}Client-Side Jitter Buffer Verification}{18}{section.4.4}%
-\contentsline {section}{\numberline {4.5}Setup Again / Quality Switch Verification}{19}{section.4.5}%
-\contentsline {section}{\numberline {4.6}I/O Multiplexing Scalability}{19}{section.4.6}%
-\contentsline {chapter}{\numberline {5}Conclusion}{20}{chapter.5}%
+\contentsline {section}{\numberline {4.5}Setup Again / Quality Switch Verification}{18}{section.4.5}%
+\contentsline {section}{\numberline {4.6}I/O Multiplexing Scalability}{18}{section.4.6}%
+\contentsline {chapter}{\numberline {5}Conclusion}{19}{chapter.5}%
