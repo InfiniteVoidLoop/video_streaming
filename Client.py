@@ -6,7 +6,7 @@ import socket, threading, sys, traceback, os
 tkMessageBox = tkinter.messagebox
 
 from RtpPacket import RtpPacket
-from Config import STATE_MULTICAST_GROUP, STATE_MULTICAST_PORT
+from Config import RTP_MULTICAST_GROUP, RTP_MULTICAST_PORT, STATE_MULTICAST_GROUP, STATE_MULTICAST_PORT
 from StatePacket import decode_state_packet
 
 CACHE_FILE_NAME = "cache-"
@@ -590,12 +590,21 @@ class Client:
                 pass
 
         if self.transport == 'UDP':
-            self.rtpSocket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            self.rtpSocket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
+            self.rtpSocket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            if hasattr(socket, 'SO_REUSEPORT'):
+                try:
+                    self.rtpSocket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
+                except OSError:
+                    pass
             self.rtpSocket.settimeout(0.5)
             try:
-                self.rtpSocket.bind(('', self.rtpPort))
-            except:
-                tkMessageBox.showwarning('Unable to Bind', 'Unable to bind PORT=%d' %self.rtpPort)
+                self.rtpSocket.bind(('', RTP_MULTICAST_PORT))
+                mreq = socket.inet_aton(RTP_MULTICAST_GROUP) + socket.inet_aton('0.0.0.0')
+                self.rtpSocket.setsockopt(socket.IPPROTO_IP, socket.IP_ADD_MEMBERSHIP, mreq)
+                print(f"Joined RTP multicast group {RTP_MULTICAST_GROUP}:{RTP_MULTICAST_PORT}")
+            except Exception as e:
+                tkMessageBox.showwarning('Unable to Join Multicast', f'Unable to join RTP multicast group {RTP_MULTICAST_GROUP}:{RTP_MULTICAST_PORT}: {e}')
         else: # TCP
             self.rtpSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             self.rtpSocket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
