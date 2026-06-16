@@ -5,6 +5,8 @@ from PIL import Image
 
 from VideoStream import VideoStream
 from RtpPacket import RtpPacket
+from Config import STATE_MULTICAST_GROUP, STATE_MULTICAST_PORT, MULTICAST_TTL
+from StatePacket import READY, PLAYING, PAUSED, STOPPED, encode_state_packet
 
 class ServerWorker:
     SETUP = 'SETUP'
@@ -25,6 +27,7 @@ class ServerWorker:
     rtpSeq = 0 
     def __init__(self, clientInfo):
         self.clientInfo = clientInfo
+        self.stateVersion = 0
         
     def run(self):
         threading.Thread(target=self.recvRtspRequest).start()
@@ -76,7 +79,9 @@ class ServerWorker:
             try:
                 self.clientInfo['videoStream'] = VideoStream(filename)
                 self.state = self.READY
+                setupSucceeded = True
             except IOError:
+                setupSucceeded = False
                 self.replyRtsp(self.FILE_NOT_FOUND_404, seq[1])
 
             self.rtpSeq = 0
@@ -86,6 +91,8 @@ class ServerWorker:
                 
             # Send RTSP reply
             self.replyRtsp(self.OK_200, seq[1])
+            if setupSucceeded:
+                self.sendStateMulticast(READY)
                 
             # Parse Transport header
             transport_line = request[2]
@@ -118,6 +125,7 @@ class ServerWorker:
                     self.clientInfo["rtpSocket"] = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
                 
                 self.replyRtsp(self.OK_200, seq[1])
+                self.sendStateMulticast(PLAYING)
                 
                 # Create a new thread and start sending RTP packets
                 self.clientInfo['event'] = threading.Event()
@@ -133,6 +141,7 @@ class ServerWorker:
                 self.clientInfo['event'].set()
             
                 self.replyRtsp(self.OK_200, seq[1])
+                self.sendStateMulticast(PAUSED)
         
         # Process TEARDOWN request
         elif requestType == self.TEARDOWN:
@@ -141,9 +150,24 @@ class ServerWorker:
             self.clientInfo['event'].set()
             
             self.replyRtsp(self.OK_200, seq[1])
+            self.sendStateMulticast(STOPPED)
             
             # Close the RTP socket
             self.clientInfo['rtpSocket'].close()
+
+    def sendStateMulticast(self, state):
+        """Announce the official stream state to the multicast state group."""
+        self.stateVersion += 1
+        packet = encode_state_packet(state, self.stateVersion)
+        stateSocket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        try:
+            stateSocket.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_TTL, MULTICAST_TTL)
+            stateSocket.sendto(packet, (STATE_MULTICAST_GROUP, STATE_MULTICAST_PORT))
+            print(f"State multicast sent: {state} v{self.stateVersion}")
+        except Exception as e:
+            print(f"Sending state multicast error: {e}")
+        finally:
+            stateSocket.close()
     
     # NOTE: Implement fragmentation for frames exceeding the MTU
     def sendRtpWithTCP(self):
