@@ -6,6 +6,8 @@ import socket, threading, sys, traceback, os
 tkMessageBox = tkinter.messagebox
 
 from RtpPacket import RtpPacket
+from Config import STATE_MULTICAST_GROUP, STATE_MULTICAST_PORT
+from StatePacket import decode_state_packet
 
 CACHE_FILE_NAME = "cache-"
 CACHE_FILE_EXT = ".jpg"
@@ -49,6 +51,9 @@ class Client:
         self.isDraining = False
         self.pendingSetup = False
         self.pendingPause = False
+        self.stateSocket = None
+        self.stateEvent = threading.Event()
+        self.startStateListener()
         
     def createWidgets(self):
         """Build GUI."""
@@ -200,7 +205,8 @@ class Client:
     
     def exitClient(self):
         """Teardown button handler."""
-        self.sendRtspRequest(self.TEARDOWN)     
+        self.closeStateListener()
+        self.sendRtspRequest(self.TEARDOWN)
         self.master.destroy() # Close the gui window
         try:
             os.remove(CACHE_FILE_NAME + self.quality.lower() + "-" + str(self.sessionId) + CACHE_FILE_EXT) # Delete the cache image from video
@@ -419,6 +425,60 @@ class Client:
             self.rtspSocket.connect((self.serverAddr, self.serverPort))
         except:
             tkMessageBox.showwarning('Connection Failed', 'Connection to \'%s\' failed.' %self.serverAddr)
+
+    def startStateListener(self):
+        """Join the state multicast group and log official server state updates."""
+        self.stateSocket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
+        self.stateSocket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        if hasattr(socket, 'SO_REUSEPORT'):
+            try:
+                self.stateSocket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
+            except OSError:
+                pass
+
+        try:
+            self.stateSocket.bind(('', STATE_MULTICAST_PORT))
+            mreq = socket.inet_aton(STATE_MULTICAST_GROUP) + socket.inet_aton('0.0.0.0')
+            self.stateSocket.setsockopt(socket.IPPROTO_IP, socket.IP_ADD_MEMBERSHIP, mreq)
+            self.stateSocket.settimeout(0.5)
+        except Exception as e:
+            print(f"Unable to join state multicast group {STATE_MULTICAST_GROUP}:{STATE_MULTICAST_PORT}: {e}")
+            try:
+                self.stateSocket.close()
+            except:
+                pass
+            self.stateSocket = None
+            return
+
+        self._stateThread = threading.Thread(target=self.listenStateMulticast, daemon=True)
+        self._stateThread.start()
+        print(f"Listening for state multicast on {STATE_MULTICAST_GROUP}:{STATE_MULTICAST_PORT}")
+
+    def listenStateMulticast(self):
+        """Receive state multicast packets without changing playback behavior yet."""
+        while not self.stateEvent.isSet():
+            try:
+                data, address = self.stateSocket.recvfrom(1024)
+                packet = decode_state_packet(data)
+                if packet['is_server']:
+                    print(f"State multicast received from {address[0]}:{address[1]}: {packet['state']} v{packet['version']}")
+                else:
+                    print(f"Ignoring non-server state multicast from {address[0]}:{address[1]}")
+            except socket.timeout:
+                continue
+            except OSError:
+                break
+            except Exception as e:
+                print(f"Ignoring invalid state multicast packet: {e}")
+
+    def closeStateListener(self):
+        """Stop the state multicast listener."""
+        self.stateEvent.set()
+        if self.stateSocket:
+            try:
+                self.stateSocket.close()
+            except:
+                pass
     
     def sendRtspRequest(self, requestCode):
         """Send RTSP request to the server."""  
