@@ -2,11 +2,13 @@ import sys, socket
 import selectors
 
 from ServerWorker import ServerWorker
+from MulticastStreamManager import MulticastStreamManager
 
 class Server:   
     def __init__(self):
         self.serverWorkers = {}
         self.selectors = selectors.DefaultSelector()
+        self.streamManager = MulticastStreamManager()
     
     def accept_client(self, rtspSocket):
         try: 
@@ -14,7 +16,7 @@ class Server:
             clientSocket.setblocking(False)
             clientInfo = {'rtspSocket': (clientSocket, clientAddress)}
 
-            worker = ServerWorker(clientInfo)
+            worker = ServerWorker(clientInfo, self.streamManager)
             self.serverWorkers[clientSocket] = worker
             self.selectors.register(clientSocket, selectors.EVENT_READ, self.handle_client_request)
         except Exception as e:
