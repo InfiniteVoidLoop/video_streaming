@@ -135,6 +135,54 @@ The client state engine integrates network operations and buffer rendering trans
    python ClientLauncher.py 127.0.0.1 8554 25000 movie.Mjpeg
    ```
 
+### 📡 Multicast Demo
+
+The RTSP server still listens on the port you pass to `Server.py`, but the media and state channels use fixed multicast groups from `Config.py`:
+
+```text
+RTP media multicast:  239.10.10.1:5004
+State multicast:      239.10.10.2:7000
+Multicast TTL:        1
+```
+
+Run one server:
+
+```bash
+python Server.py 8554
+```
+
+Then launch two or more clients in separate terminals:
+
+```bash
+python ClientLauncher.py 127.0.0.1 8554 25000 movie.Mjpeg
+python ClientLauncher.py 127.0.0.1 8554 25001 movie.Mjpeg
+```
+
+The `<rtp_port>` argument is kept for launcher compatibility. In multicast mode, clients join the shared RTP multicast port `5004` instead of using a unique RTP media port.
+
+Expected demo flow:
+
+```text
+1. Start the server.
+2. Start Client A and click Setup.
+3. Start Client B and click Setup.
+4. Click Play from either client.
+5. Both clients should follow the same server stream state and receive the same RTP multicast media.
+6. Click Pause from either client to pause the shared stream for all clients.
+7. Close one client; the other client should remain connected unless it is the last active client.
+```
+
+Useful console logs during the demo:
+
+```text
+Multicast client registered: <session> (<count> active)
+RTP multicast sender ready: 239.10.10.1:5004 ttl=1
+State multicast sent: PLAYING v<version>
+Joined RTP multicast group 239.10.10.1:5004
+Listening for state multicast on 239.10.10.2:7000
+State multicast received from <server>:<port>: PLAYING v<version>
+```
+
 ---
 
 ## 📁 Repository Structure
@@ -143,9 +191,12 @@ The client state engine integrates network operations and buffer rendering trans
 .
 ├── Client.py             # RTSP Client core logic & Jitter Buffer controls
 ├── ClientLauncher.py     # GUI and Client initialization entry point
+├── Config.py             # Shared multicast group, port, and TTL settings
+├── MulticastStreamManager.py # Shared RTP multicast sender and server state owner
 ├── RtpPacket.py          # RTP Packet encapsulation & header parsing (12-byte headers)
 ├── Server.py             # Non-blocking I/O multiplexing RTSP Server entry point
 ├── ServerWorker.py       # RTSP State Machine, TCP/UDP Media Streamer, Frame Fragmenter
+├── StatePacket.py        # UDP multicast state announcement encoder/decoder
 ├── VideoStream.py        # MJPEG parser and frame extraction engine
 ├── movie.Mjpeg           # Sample MJPEG video file
 ├── doc/

@@ -142,6 +142,7 @@ class MulticastStreamManager:
 
         self.rtpSocket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.rtpSocket.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_TTL, MULTICAST_TTL)
+        print(f"RTP multicast sender ready: {RTP_MULTICAST_GROUP}:{RTP_MULTICAST_PORT} ttl={MULTICAST_TTL}")
 
     def _send_rtp_loop(self):
         while not self.stopEvent.wait(0.05):
