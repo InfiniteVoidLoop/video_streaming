@@ -5,7 +5,7 @@ from PIL import Image
 
 from VideoStream import VideoStream
 from RtpPacket import RtpPacket
-from Config import STATE_MULTICAST_GROUP, STATE_MULTICAST_PORT, MULTICAST_TTL
+from Config import RTP_MULTICAST_GROUP, RTP_MULTICAST_PORT, STATE_MULTICAST_GROUP, STATE_MULTICAST_PORT, MULTICAST_TTL
 from StatePacket import READY, PLAYING, PAUSED, STOPPED, encode_state_packet
 
 class ServerWorker:
@@ -123,6 +123,7 @@ class ServerWorker:
                     self.clientInfo["rtpSocket"].connect((address, port))
                 else:
                     self.clientInfo["rtpSocket"] = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+                    self.clientInfo["rtpSocket"].setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_TTL, MULTICAST_TTL)
                 
                 self.replyRtsp(self.OK_200, seq[1])
                 self.sendStateMulticast(PLAYING)
@@ -210,10 +211,8 @@ class ServerWorker:
                     chunkData = data[bytesSent:bytesSent + chunkSize]
                     markerBit = (bytesSent + chunkSize) == frameSize
                     try:
-                        address = self.clientInfo['rtspSocket'][1][0]
-                        port = int(self.clientInfo['rtpPort'])
                         packet = self.makeRtp(chunkData, self.rtpSeq, markerBit)
-                        self.clientInfo['rtpSocket'].sendto(packet, (address, port))
+                        self.clientInfo['rtpSocket'].sendto(packet, (RTP_MULTICAST_GROUP, RTP_MULTICAST_PORT))
                             
                         self.rtpSeq += 1
                         bytesSent += chunkSize
