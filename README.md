@@ -129,11 +129,13 @@ The client state engine integrates network operations and buffer rendering trans
    ```
 2. **Launch the Video Client:**
    ```bash
-   python ClientLauncher.py <server_ip> <server_port> <rtp_port> <video_file>
+   python ClientLauncher.py <server_ip> <server_port> [server_media_file]
    
    # Example (running client locally connecting to server):
-   python ClientLauncher.py 127.0.0.1 8554 25000 movie.Mjpeg
+   python ClientLauncher.py 127.0.0.1 8554
    ```
+
+   The optional `server_media_file` is the media resource requested from the server, not a file read by the client. If omitted, the client requests `movie.Mjpeg` from the server.
 
 ### 📡 Multicast Demo
 
@@ -154,11 +156,11 @@ python Server.py 8554
 Then launch two or more clients in separate terminals:
 
 ```bash
-python ClientLauncher.py 127.0.0.1 8554 25000 movie.Mjpeg
-python ClientLauncher.py 127.0.0.1 8554 25001 movie.Mjpeg
+python ClientLauncher.py 127.0.0.1 8554
+python ClientLauncher.py 127.0.0.1 8554
 ```
 
-The `<rtp_port>` argument is kept for launcher compatibility. In multicast mode, clients join the shared RTP multicast port `5004` instead of using a unique RTP media port.
+The clients do not read `movie.Mjpeg` locally. They request the server-side media resource over RTSP, then receive RTP frames from the shared multicast port `5004`.
 
 Expected demo flow:
 

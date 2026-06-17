@@ -6,7 +6,7 @@ import socket, threading, sys, traceback, os
 tkMessageBox = tkinter.messagebox
 
 from RtpPacket import RtpPacket
-from Config import RTP_MULTICAST_GROUP, RTP_MULTICAST_PORT, STATE_MULTICAST_GROUP, STATE_MULTICAST_PORT
+from Config import DEFAULT_MEDIA_FILE, RTP_MULTICAST_GROUP, RTP_MULTICAST_PORT, STATE_MULTICAST_GROUP, STATE_MULTICAST_PORT
 from StatePacket import PAUSED as STREAM_PAUSED, PLAYING as STREAM_PLAYING, READY as STREAM_READY, STOPPED as STREAM_STOPPED, decode_state_packet
 
 CACHE_FILE_NAME = "cache-"
@@ -24,13 +24,13 @@ class Client:
     TEARDOWN = 3
     
     # Initiation..
-    def __init__(self, master, serveraddr, serverport, rtpport, filename):
+    def __init__(self, master, serveraddr, serverport, filename=DEFAULT_MEDIA_FILE):
         self.master = master
         self.master.protocol("WM_DELETE_WINDOW", self.handler)
         self.createWidgets()
         self.serverAddr = serveraddr
         self.serverPort = int(serverport)
-        self.rtpPort = int(rtpport)
+        self.rtpPort = RTP_MULTICAST_PORT
         self.fileName = filename
         self.rtspSeq = 0
         self.sessionId = 0
