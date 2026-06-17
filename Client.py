@@ -220,11 +220,10 @@ class Client:
             # Now safe to create new event and thread
             self.playEvent = threading.Event()
             self.playEvent.clear()
-        
+
             with self.bufferLock:
-                self.frameBuffer.clear()  # Clear buffer when starting new playback
-            self.isBuffering = True
-            self.frameNbr = -1  # Reset frame number for new playback
+                hasBufferedFrames = len(self.frameBuffer) > 0
+            self.isBuffering = not hasBufferedFrames
 
             self._rtpThread = threading.Thread(target=self.listenRtpWithUDP)
 
@@ -429,11 +428,9 @@ class Client:
             self.isDraining = False
             self.pendingPause = False
             self.pauseInProgress = False
-            self.isBuffering = True
+            self.isBuffering = False
             if hasattr(self, 'playEvent'):
                 self.playEvent.set()
-            with self.bufferLock:
-                self.frameBuffer.clear()
             self.pause.config(state=NORMAL)
 
         elif streamState == STREAM_STOPPED:
@@ -547,6 +544,11 @@ class Client:
                         # Update RTSP state.
                         self.state = self.READY
                         self.setupInProgress = False
+
+                        with self.bufferLock:
+                            self.frameBuffer.clear()
+                        self.frameNbr = -1
+                        self.isBuffering = True
 
                         # Open RTP port.
                         self.openRtpPort()
