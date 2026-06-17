@@ -13,15 +13,13 @@ Designed and implemented as a professional university project for the **Computer
 ## 🌟 Key Features
 
 *   **⚡ Non-Blocking Multiplexed Server:** Built with the Python `selectors` module to implement I/O multiplexing. The server manages multiple client RTSP signaling channels concurrently on a single thread without blocking, ensuring optimal resource utilization.
-*   **🔄 Hybrid Dual-Transport Architecture (UDP & TCP):**
-    *   **SD (Standard Definition) Streaming:** Streamed over **UDP** for low-overhead, real-time packet delivery.
-    *   **HD (High Definition) Streaming:** Streamed over **TCP** with custom length-prefixed framing (5-byte headers) to ensure 100% reliable packet reassembly and eliminate packet-loss artifacts in high-bitrate media.
+*   **📡 UDP Multicast Media Architecture:** Video frames are packetized as RTP and sent once to a shared UDP multicast group. RTSP remains a per-client TCP control channel for SETUP, PLAY, PAUSE, and TEARDOWN.
 *   **📶 Client-Side Jitter Buffer (Double-Buffered State Machine):**
     *   Implements a thread-safe, lock-protected queue that acts as a client caching layer.
     *   Utilizes a **Low-Water / High-Water Mark state machine** (`minBufferSize = 15` frames) to dynamically pause/resume visual rendering, absorbing network jitter and packet arrival fluctuations.
-*   **🎬 Seamless Dynamic Quality Switching:** Clients can switch stream resolutions on-the-fly. The client triggers a pipeline draining phase that safely plays out cached buffer frames before establishing a new RTP session, preserving session state and preventing UI flickering.
+*   **🎬 Shared Live Stream Control:** Clients join the same multicast media group and follow the server's official stream state announcements.
 *   **📦 UDP Fragmentation & RTP Reassembly:** Features robust fragmentation for UDP payloads exceeding MTU limits (1400 bytes). Employs RTP Marker bits to detect frame boundaries, facilitating perfect client-side JPEG reassembly.
-*   **🎨 Premium Responsive Tkinter GUI:** A dark-themed, sleek user interface displaying live video playback, buffer state visualizations, and intuitive playback controls (Setup, Play, Pause, Quality Selection, and Teardown).
+*   **🎨 Premium Responsive Tkinter GUI:** A dark-themed, sleek user interface displaying live video playback, buffer state visualizations, and intuitive playback controls (Setup, Play, Pause, and Teardown).
 
 ---
 
@@ -36,9 +34,9 @@ sequenceDiagram
     participant Client as RTP/RTSP Client
     participant Server as Multiplexed RTSP Server
 
-    User->>Client: Clicks "Setup" & Selects Quality (SD/HD)
-    Client->>Server: RTSP SETUP (Transport: UDP/TCP)
-    Server-->>Client: RTSP 200 OK (Session ID, Server Ports)
+    User->>Client: Clicks "Setup"
+    Client->>Server: RTSP SETUP (Transport: UDP)
+    Server-->>Client: RTSP 200 OK (Session ID)
     
     User->>Client: Clicks "Play"
     Client->>Server: RTSP PLAY
@@ -48,21 +46,17 @@ sequenceDiagram
     rect rgb(20, 20, 30)
         Note over Server, Client: Media Streaming Loop
         Server->>Server: Read MJPEG Frame
-        alt Quality == SD (UDP)
-            Server->>Server: Fragment Frame (MTU = 1400 bytes)
-            Server->>Client: Send RTP Packets over UDP
-        else Quality == HD (TCP)
-            Server->>Client: Send RTP Packet over TCP (5-byte length-prefix)
-        end
+        Server->>Server: Fragment Frame (MTU = 1400 bytes)
+        Server->>Client: Send RTP Packets to UDP multicast group
         Client->>Client: Reassemble & Queue in Jitter Buffer
         Client->>Client: Render from Buffer (Min Buffer: 15 frames)
     end
 
-    User->>Client: Clicks "Setup" (Switch Quality)
+    User->>Client: Clicks "Setup" (Reset Stream)
     Note over Client: Enters isDraining Pipeline Mode
     Note over Client: Plays out cached frames to avoid abrupt cut
-    Client->>Server: RTSP SETUP (New Quality Selected)
-    Server->>Server: Close Old RTP Channel & Re-initialize Video Stream
+    Client->>Server: RTSP SETUP
+    Server->>Server: Re-initialize Shared Video Stream
     Server-->>Client: RTSP 200 OK
     Client->>Server: RTSP PLAY
     Server-->>Client: RTSP 200 OK
@@ -80,7 +74,7 @@ The client state engine integrates network operations and buffer rendering trans
                   |              INIT              |
                   +--------------------------------+
                                   |
-                                  | SETUP (Selects SD/HD)
+                                  | SETUP (Join Multicast)
                                   v
                   +--------------------------------+
                   |             READY              |
