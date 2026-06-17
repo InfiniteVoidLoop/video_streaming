@@ -7,7 +7,7 @@ tkMessageBox = tkinter.messagebox
 
 from RtpPacket import RtpPacket
 from Config import RTP_MULTICAST_GROUP, RTP_MULTICAST_PORT, STATE_MULTICAST_GROUP, STATE_MULTICAST_PORT
-from StatePacket import decode_state_packet
+from StatePacket import PAUSED as STREAM_PAUSED, PLAYING as STREAM_PLAYING, READY as STREAM_READY, STOPPED as STREAM_STOPPED, decode_state_packet
 
 CACHE_FILE_NAME = "cache-"
 CACHE_FILE_EXT = ".jpg"
@@ -53,6 +53,7 @@ class Client:
         self.pendingPause = False
         self.stateSocket = None
         self.stateEvent = threading.Event()
+        self.lastStateVersion = 0
         self.startStateListener()
         
     def createWidgets(self):
@@ -223,6 +224,17 @@ class Client:
     def playMovie(self):
         """Play button handler."""
         if self.state == self.READY:
+            self.startPlaybackPipeline(sendRtsp=True)
+
+    def startPlaybackPipeline(self, sendRtsp=False):
+        """Start local RTP receive/render loops, optionally requesting PLAY first."""
+        if not hasattr(self, 'rtpSocket') or not self.rtpSocket:
+            return
+
+        if self.state == self.PLAYING and hasattr(self, '_rtpThread') and self._rtpThread.is_alive():
+            return
+
+        if self.state in (self.READY, self.PLAYING):
             # Kill the old listen thread before starting a new one.
             if hasattr(self, 'playEvent'):
                 self.playEvent.set()  # Signal old thread to stop
@@ -241,12 +253,15 @@ class Client:
                 self._rtpThread = threading.Thread(target=self.listenRtpWithUDP)
             else:
                 self._rtpThread = threading.Thread(target=self.listenRtpWithTCP)
-                
+
             self._rtpThread.start()
-            self.sendRtspRequest(self.PLAY)
-            
+            if sendRtsp:
+                self.sendRtspRequest(self.PLAY)
+            else:
+                self.state = self.PLAYING
+
             # Start UI clock play loop to render frames from buffer
-            self.master.after(120, self.renderClientBufferLoop)  
+            self.master.after(120, self.renderClientBufferLoop)
 
     def renderClientBufferLoop(self):
         """ Render frames from buffer using clock """
@@ -455,13 +470,14 @@ class Client:
         print(f"Listening for state multicast on {STATE_MULTICAST_GROUP}:{STATE_MULTICAST_PORT}")
 
     def listenStateMulticast(self):
-        """Receive state multicast packets without changing playback behavior yet."""
+        """Receive official state multicast packets and apply them on the UI thread."""
         while not self.stateEvent.isSet():
             try:
                 data, address = self.stateSocket.recvfrom(1024)
                 packet = decode_state_packet(data)
                 if packet['is_server']:
                     print(f"State multicast received from {address[0]}:{address[1]}: {packet['state']} v{packet['version']}")
+                    self.master.after(0, self.applyServerState, packet['state'], packet['version'])
                 else:
                     print(f"Ignoring non-server state multicast from {address[0]}:{address[1]}")
             except socket.timeout:
@@ -470,6 +486,47 @@ class Client:
                 break
             except Exception as e:
                 print(f"Ignoring invalid state multicast packet: {e}")
+
+    def applyServerState(self, streamState, version):
+        """Update local playback from the server's official multicast state."""
+        if version <= self.lastStateVersion:
+            return
+        self.lastStateVersion = version
+
+        if streamState == STREAM_READY:
+            if self.state == self.INIT:
+                return
+            self.state = self.READY
+            self.isDraining = False
+            self.pendingPause = False
+            if hasattr(self, 'playEvent'):
+                self.playEvent.set()
+
+        elif streamState == STREAM_PLAYING:
+            if self.state == self.READY:
+                self.startPlaybackPipeline(sendRtsp=False)
+
+        elif streamState == STREAM_PAUSED:
+            if self.state == self.INIT:
+                return
+            self.state = self.READY
+            self.isDraining = False
+            self.pendingPause = False
+            self.isBuffering = True
+            if hasattr(self, 'playEvent'):
+                self.playEvent.set()
+
+        elif streamState == STREAM_STOPPED:
+            self.state = self.INIT
+            self.isDraining = False
+            self.pendingSetup = False
+            self.pendingPause = False
+            self.isBuffering = True
+            self.frameNbr = -1
+            if hasattr(self, 'playEvent'):
+                self.playEvent.set()
+            with self.bufferLock:
+                self.frameBuffer.clear()
 
     def closeStateListener(self):
         """Stop the state multicast listener."""
