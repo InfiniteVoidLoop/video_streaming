@@ -101,10 +101,12 @@ class ServerWorker:
 
         # Process PLAY request      
         elif requestType == self.PLAY:
-            if self.state == self.READY:
+            if self.state == self.READY or self.clientInfo.get('multicastRegistered'):
                 print("processing PLAY\n")
                 try:
                     if self.clientInfo.get('transport', 'UDP') == 'TCP':
+                        if self.state != self.READY:
+                            return
                         self.clientInfo["rtpSocket"] = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                         address = self.clientInfo['rtspSocket'][1][0]
                         port = int(self.clientInfo['rtpPort'])
@@ -123,11 +125,13 @@ class ServerWorker:
 
         # Process PAUSE request
         elif requestType == self.PAUSE:
-            if self.state == self.PLAYING:
+            if self.state == self.PLAYING or self.clientInfo.get('multicastRegistered'):
                 print("processing PAUSE\n")
                 self.state = self.READY
 
                 if self.clientInfo.get('transport', 'UDP') == 'TCP':
+                    if 'event' not in self.clientInfo or not self.clientInfo['event']:
+                        return
                     self.clientInfo['event'].set()
                 else:
                     self.streamManager.pause()

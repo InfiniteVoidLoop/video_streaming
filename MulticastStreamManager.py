@@ -89,12 +89,16 @@ class MulticastStreamManager:
     def pause(self):
         """Pause the shared multicast sender without resetting the video."""
         with self.lock:
-            if self.state != PLAYING:
+            if self.state == PAUSED:
+                should_announce_paused = True
+                worker = None
+            elif self.state != PLAYING:
                 return
-
-            self.state = PAUSED
-            self.stopEvent.set()
-            worker = self.worker
+            else:
+                should_announce_paused = True
+                self.state = PAUSED
+                self.stopEvent.set()
+                worker = self.worker
 
         if worker:
             worker.join(timeout=0.5)
@@ -103,7 +107,8 @@ class MulticastStreamManager:
             if self.worker is worker:
                 self.worker = None
 
-        self._send_state_multicast(PAUSED)
+        if should_announce_paused:
+            self._send_state_multicast(PAUSED)
 
     def stop(self):
         """Stop the shared stream and release multicast resources."""

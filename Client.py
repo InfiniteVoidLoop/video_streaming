@@ -51,9 +51,12 @@ class Client:
         self.isDraining = False
         self.pendingSetup = False
         self.pendingPause = False
+        self.pauseInProgress = False
+        self.setupInProgress = False
         self.stateSocket = None
         self.stateEvent = threading.Event()
         self.lastStateVersion = 0
+        self.serverStreamState = STREAM_STOPPED
         self.startStateListener()
         
     def createWidgets(self):
@@ -173,8 +176,9 @@ class Client:
     def confirmMulticastStream(self):
         self.quality = "multicast"
         self.transport = "UDP"
-            
+
         self.quality_window.destroy()
+        self.setupInProgress = True
         self.sendRtspRequest(self.SETUP)
     
     def exitClient(self):
@@ -189,9 +193,9 @@ class Client:
 
     def pauseMovie(self):
         """Pause button handler."""
-        if self.state == self.PLAYING:
-            self.pendingPause = True 
-            self.isDraining = True
+        if self.state == self.PLAYING and not self.pauseInProgress:
+            self.pauseInProgress = True
+            self.pause.config(state=DISABLED)
             self.sendRtspRequest(self.PAUSE)
     
     def playMovie(self):
@@ -227,6 +231,7 @@ class Client:
             self._rtpThread.start()
             if sendRtsp:
                 self.sendRtspRequest(self.PLAY)
+                self.state = self.PLAYING
             else:
                 self.state = self.PLAYING
 
@@ -250,7 +255,7 @@ class Client:
                 frame_bytes = self.frameBuffer.pop(0)
                 self.updateMovie(self.writeFrame(frame_bytes))
             else:
-                if self.isDraining:  
+                if self.isDraining:
                     # print("Buffer completely drained. Stopping playback.")
                     self.isDraining = False
                     self.state = self.INIT
@@ -258,7 +263,6 @@ class Client:
                     if self.pendingPause:
                         self.pendingPause = False
                         self.state = self.READY
-                        self.sendRtspRequest(self.PAUSE)
 
                     elif self.pendingSetup:
                         self.pendingSetup = False
@@ -389,17 +393,32 @@ class Client:
         if version <= self.lastStateVersion:
             return
         self.lastStateVersion = version
+        self.serverStreamState = streamState
 
         if streamState == STREAM_READY:
             if self.state == self.INIT:
+                if not self.setupInProgress:
+                    print("Server stream is READY; auto-sending SETUP for this client")
+                    self.setupInProgress = True
+                    self.transport = "UDP"
+                    self.sendRtspRequest(self.SETUP)
                 return
             self.state = self.READY
             self.isDraining = False
             self.pendingPause = False
+            self.pauseInProgress = False
+            self.pause.config(state=NORMAL)
             if hasattr(self, 'playEvent'):
                 self.playEvent.set()
 
         elif streamState == STREAM_PLAYING:
+            if self.state == self.INIT:
+                if not self.setupInProgress:
+                    print("Server stream is PLAYING; auto-sending SETUP for this client")
+                    self.setupInProgress = True
+                    self.transport = "UDP"
+                    self.sendRtspRequest(self.SETUP)
+                return
             if self.state == self.READY:
                 self.startPlaybackPipeline(sendRtsp=False)
 
@@ -409,21 +428,28 @@ class Client:
             self.state = self.READY
             self.isDraining = False
             self.pendingPause = False
+            self.pauseInProgress = False
             self.isBuffering = True
             if hasattr(self, 'playEvent'):
                 self.playEvent.set()
+            with self.bufferLock:
+                self.frameBuffer.clear()
+            self.pause.config(state=NORMAL)
 
         elif streamState == STREAM_STOPPED:
             self.state = self.INIT
             self.isDraining = False
             self.pendingSetup = False
             self.pendingPause = False
+            self.pauseInProgress = False
+            self.setupInProgress = False
             self.isBuffering = True
             self.frameNbr = -1
             if hasattr(self, 'playEvent'):
                 self.playEvent.set()
             with self.bufferLock:
                 self.frameBuffer.clear()
+            self.pause.config(state=NORMAL)
 
     def closeStateListener(self):
         """Stop the state multicast listener."""
@@ -520,15 +546,21 @@ class Client:
                     if self.requestSent == self.SETUP:
                         # Update RTSP state.
                         self.state = self.READY
-                        
+                        self.setupInProgress = False
+
                         # Open RTP port.
-                        self.openRtpPort() 
+                        self.openRtpPort()
+                        if self.serverStreamState == STREAM_PLAYING:
+                            self.startPlaybackPipeline(sendRtsp=False)
                     elif self.requestSent == self.PLAY:
                         self.state = self.PLAYING
                     elif self.requestSent == self.PAUSE:
                         self.state = self.READY
+                        self.pauseInProgress = False
+                        self.pause.config(state=NORMAL)
                         # The play thread exits. A new thread is created on resume.
-                        self.playEvent.set()
+                        if hasattr(self, 'playEvent'):
+                            self.playEvent.set()
                     elif self.requestSent == self.TEARDOWN:
                         self.state = self.INIT
                         # Flag the teardownAcked to close the socket.
