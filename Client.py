@@ -6,6 +6,8 @@ import socket, threading, sys, traceback, os
 tkMessageBox = tkinter.messagebox
 
 from RtpPacket import RtpPacket
+from Config import DEFAULT_MEDIA_FILE, RTP_MULTICAST_GROUP, RTP_MULTICAST_PORT, STATE_MULTICAST_GROUP, STATE_MULTICAST_PORT
+from StatePacket import PAUSED as STREAM_PAUSED, PLAYING as STREAM_PLAYING, READY as STREAM_READY, STOPPED as STREAM_STOPPED, decode_state_packet
 
 CACHE_FILE_NAME = "cache-"
 CACHE_FILE_EXT = ".jpg"
@@ -22,13 +24,13 @@ class Client:
     TEARDOWN = 3
     
     # Initiation..
-    def __init__(self, master, serveraddr, serverport, rtpport, filename):
+    def __init__(self, master, serveraddr, serverport, filename=DEFAULT_MEDIA_FILE):
         self.master = master
         self.master.protocol("WM_DELETE_WINDOW", self.handler)
         self.createWidgets()
         self.serverAddr = serveraddr
         self.serverPort = int(serverport)
-        self.rtpPort = int(rtpport)
+        self.rtpPort = RTP_MULTICAST_PORT
         self.fileName = filename
         self.rtspSeq = 0
         self.sessionId = 0
@@ -37,7 +39,7 @@ class Client:
         self.connectToServer()
         self.frameNbr = -1
         self.transport = "UDP"
-        self.quality = "SD"
+        self.quality = "multicast"
         self.rtpConnection = None
         self.frameBuffer = []
         # NOTE: Handle buffer access UI and network
@@ -49,6 +51,13 @@ class Client:
         self.isDraining = False
         self.pendingSetup = False
         self.pendingPause = False
+        self.pauseInProgress = False
+        self.setupInProgress = False
+        self.stateSocket = None
+        self.stateEvent = threading.Event()
+        self.lastStateVersion = 0
+        self.serverStreamState = STREAM_STOPPED
+        self.startStateListener()
         
     def createWidgets(self):
         """Build GUI."""
@@ -83,7 +92,7 @@ class Client:
     def setupMovie(self):
         """Setup button handler - Đã thêm cấu hình xử lý riêng cho trạng thái PAUSE (READY)"""
         if self.state == self.INIT:
-            self.chooseQuality()
+            self.chooseMulticastStream()
 
         elif self.state == self.PLAYING:
             if tkMessageBox.askokcancel("Reset Video?", "Do you want to stop current playback and setup from the beginning?"):
@@ -101,7 +110,7 @@ class Client:
                 self.isDraining = False
                 self.pendingSetup = False
                 self.frameNbr = -1
-                self.chooseQuality()     
+                self.chooseMulticastStream()
 
     def startDrainingPipeline(self):
         # print("Stop network stream, draining remaining buffered frames to UI.")
@@ -110,13 +119,13 @@ class Client:
         self.isDraining = True
         self.state = self.PLAYING
 
-    def chooseQuality(self):
-        # Create a beautiful modal window to choose quality
+    def chooseMulticastStream(self):
+        # Multicast media uses UDP only; keep setup explicit without offering TCP.
         self.quality_window = Toplevel(self.master)
-        self.quality_window.title("Video Quality")
+        self.quality_window.title("Multicast Stream")
         
         # Center the pop-up on the screen
-        w, h = 320, 160
+        w, h = 360, 150
         ws = self.master.winfo_screenwidth()
         hs = self.master.winfo_screenheight()
         x = (ws/2) - (w/2)
@@ -129,51 +138,27 @@ class Client:
         
         title_label = Label(
             self.quality_window, 
-            text="Choose Video Quality", 
+            text="Start UDP Multicast Stream",
             fg="#FFFFFF", 
             bg="#1E1E1E", 
             font=("Helvetica", 12, "bold")
         )
         title_label.pack(pady=12)
         
-        self.quality_var = StringVar(value="SD")
-        
-        frame = Frame(self.quality_window, bg="#1E1E1E")
-        frame.pack()
-        
-        rb_sd = Radiobutton(
-            frame, 
-            text="SD (720p) - UDP", 
-            variable=self.quality_var, 
-            value="SD", 
-            fg="#E0E0E0", 
-            bg="#1E1E1E", 
-            selectcolor="#2C2C2C",
-            activeforeground="#FFFFFF",
-            activebackground="#1E1E1E",
+        info_label = Label(
+            self.quality_window,
+            text="RTP media is received from the shared UDP multicast group.",
+            fg="#E0E0E0",
+            bg="#1E1E1E",
             font=("Helvetica", 10)
         )
-        rb_sd.pack(anchor=W, pady=2)
-        
-        rb_hd = Radiobutton(
-            frame, 
-            text="HD (1080p) - TCP", 
-            variable=self.quality_var, 
-            value="HD", 
-            fg="#E0E0E0", 
-            bg="#1E1E1E", 
-            selectcolor="#2C2C2C",
-            activeforeground="#FFFFFF",
-            activebackground="#1E1E1E",
-            font=("Helvetica", 10)
-        )
-        rb_hd.pack(anchor=W, pady=2)
+        info_label.pack(pady=8)
         
         btn_ok = Button(
-            self.quality_window, 
-            text="OK", 
-            width=12, 
-            command=self.confirmQuality,
+            self.quality_window,
+            text="OK",
+            width=12,
+            command=self.confirmMulticastStream,
             fg="#FFFFFF",
             bg="#007ACC",
             activeforeground="#FFFFFF",
@@ -188,19 +173,18 @@ class Client:
         self.quality_window.grab_set()
         self.master.wait_window(self.quality_window)
 
-    def confirmQuality(self):
-        self.quality = self.quality_var.get()
-        if self.quality == "HD":
-            self.transport = "TCP"
-        else:
-            self.transport = "UDP"
-            
+    def confirmMulticastStream(self):
+        self.quality = "multicast"
+        self.transport = "UDP"
+
         self.quality_window.destroy()
+        self.setupInProgress = True
         self.sendRtspRequest(self.SETUP)
     
     def exitClient(self):
         """Teardown button handler."""
-        self.sendRtspRequest(self.TEARDOWN)     
+        self.closeStateListener()
+        self.sendRtspRequest(self.TEARDOWN)
         self.master.destroy() # Close the gui window
         try:
             os.remove(CACHE_FILE_NAME + self.quality.lower() + "-" + str(self.sessionId) + CACHE_FILE_EXT) # Delete the cache image from video
@@ -209,14 +193,25 @@ class Client:
 
     def pauseMovie(self):
         """Pause button handler."""
-        if self.state == self.PLAYING:
-            self.pendingPause = True 
-            self.isDraining = True
+        if self.state == self.PLAYING and not self.pauseInProgress:
+            self.pauseInProgress = True
+            self.pause.config(state=DISABLED)
             self.sendRtspRequest(self.PAUSE)
     
     def playMovie(self):
         """Play button handler."""
         if self.state == self.READY:
+            self.startPlaybackPipeline(sendRtsp=True)
+
+    def startPlaybackPipeline(self, sendRtsp=False):
+        """Start local RTP receive/render loops, optionally requesting PLAY first."""
+        if not hasattr(self, 'rtpSocket') or not self.rtpSocket:
+            return
+
+        if self.state == self.PLAYING and hasattr(self, '_rtpThread') and self._rtpThread.is_alive():
+            return
+
+        if self.state in (self.READY, self.PLAYING):
             # Kill the old listen thread before starting a new one.
             if hasattr(self, 'playEvent'):
                 self.playEvent.set()  # Signal old thread to stop
@@ -225,22 +220,22 @@ class Client:
             # Now safe to create new event and thread
             self.playEvent = threading.Event()
             self.playEvent.clear()
-        
-            with self.bufferLock:
-                self.frameBuffer.clear()  # Clear buffer when starting new playback
-            self.isBuffering = True
-            self.frameNbr = -1  # Reset frame number for new playback
 
-            if self.transport == 'UDP':
-                self._rtpThread = threading.Thread(target=self.listenRtpWithUDP)
-            else:
-                self._rtpThread = threading.Thread(target=self.listenRtpWithTCP)
-                
+            with self.bufferLock:
+                hasBufferedFrames = len(self.frameBuffer) > 0
+            self.isBuffering = not hasBufferedFrames
+
+            self._rtpThread = threading.Thread(target=self.listenRtpWithUDP)
+
             self._rtpThread.start()
-            self.sendRtspRequest(self.PLAY)
-            
+            if sendRtsp:
+                self.sendRtspRequest(self.PLAY)
+                self.state = self.PLAYING
+            else:
+                self.state = self.PLAYING
+
             # Start UI clock play loop to render frames from buffer
-            self.master.after(120, self.renderClientBufferLoop)  
+            self.master.after(120, self.renderClientBufferLoop)
 
     def renderClientBufferLoop(self):
         """ Render frames from buffer using clock """
@@ -259,7 +254,7 @@ class Client:
                 frame_bytes = self.frameBuffer.pop(0)
                 self.updateMovie(self.writeFrame(frame_bytes))
             else:
-                if self.isDraining:  
+                if self.isDraining:
                     # print("Buffer completely drained. Stopping playback.")
                     self.isDraining = False
                     self.state = self.INIT
@@ -267,12 +262,11 @@ class Client:
                     if self.pendingPause:
                         self.pendingPause = False
                         self.state = self.READY
-                        self.sendRtspRequest(self.PAUSE)
 
                     elif self.pendingSetup:
                         self.pendingSetup = False
                         self.state = self.INIT
-                        self.chooseQuality()                 
+                        self.chooseMulticastStream()
                     return
                 else:
                     self.isBuffering = True
@@ -324,79 +318,6 @@ class Client:
                         pass
                     break
                            
-    def listenRtpWithTCP(self):        
-        """Listen for video frames using TCP frame-by-frame"""
-        try:
-            # Accept connection from server with a timeout of 5 seconds
-            self.rtpSocket.settimeout(5.0)
-            self.rtpConnection, addr = self.rtpSocket.accept()
-            self.rtpConnection.settimeout(0.5)
-            print("RTP/TCP connection established with server")
-        except Exception as e:
-            print(f"RTP/TCP accept failed or timed out: {e}")
-            return
-
-        while not self.playEvent.isSet():
-            try:
-                # Read 5-byte length prefix (ASCII string)
-                length_bytes = self.recv_all(self.rtpConnection, 5)
-                if not length_bytes:
-                    break
-                length = int(length_bytes.decode())
-                data = self.recv_all(self.rtpConnection, length)
-                print("Received Frame over TCP")
-                print("Size of packet: " + str(len(data)))
-
-                if not data:
-                    break
-
-                with self.bufferLock:
-                    self.frameBuffer.append(data)
-                    if len(self.frameBuffer) > 100:
-                        self.frameBuffer.pop(0)  # Discard oldest frame if buffer exceeds size
-            except:
-                # Stop listening upon requesting PAUSE or TEARDOWN
-                if self.playEvent.isSet(): 
-                    break
-                
-                # Upon receiving ACK for TEARDOWN request,
-                # close the RTP socket and connection
-                if self.teardownAcked == 1:
-                    if hasattr(self, 'rtpConnection') and self.rtpConnection:
-                        try:
-                            self.rtpConnection.shutdown(socket.SHUT_RDWR)
-                            self.rtpConnection.close()
-                        except:
-                            pass
-                    try:
-                        self.rtpSocket.shutdown(socket.SHUT_RDWR)
-                        self.rtpSocket.close()
-                    except:
-                        pass
-                    break
-
-        if hasattr(self, 'rtpConnection') and self.rtpConnection:
-            try:
-                self.rtpConnection.close()
-            except:
-                pass
-
-    def recv_all(self, sock, n):
-        """Helper to receive exactly n bytes from a TCP socket."""
-        data = b''
-        while len(data) < n:
-            try:
-                packet = sock.recv(n - len(data))
-                if not packet:
-                    return None
-                data += packet
-            except socket.timeout:
-                if len(data) > 0:
-                    continue
-                else:
-                    raise
-        return data
-                    
     def writeFrame(self, data):
         """Write the received frame to a temp image file. Return the image file."""
         cachename = CACHE_FILE_NAME + self.quality.lower() + "-" + str(self.sessionId) + CACHE_FILE_EXT
@@ -419,6 +340,122 @@ class Client:
             self.rtspSocket.connect((self.serverAddr, self.serverPort))
         except:
             tkMessageBox.showwarning('Connection Failed', 'Connection to \'%s\' failed.' %self.serverAddr)
+
+    def startStateListener(self):
+        """Join the state multicast group and log official server state updates."""
+        self.stateSocket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
+        self.stateSocket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        if hasattr(socket, 'SO_REUSEPORT'):
+            try:
+                self.stateSocket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
+            except OSError:
+                pass
+
+        try:
+            self.stateSocket.bind(('', STATE_MULTICAST_PORT))
+            mreq = socket.inet_aton(STATE_MULTICAST_GROUP) + socket.inet_aton('0.0.0.0')
+            self.stateSocket.setsockopt(socket.IPPROTO_IP, socket.IP_ADD_MEMBERSHIP, mreq)
+            self.stateSocket.settimeout(0.5)
+        except Exception as e:
+            print(f"Unable to join state multicast group {STATE_MULTICAST_GROUP}:{STATE_MULTICAST_PORT}: {e}")
+            try:
+                self.stateSocket.close()
+            except:
+                pass
+            self.stateSocket = None
+            return
+
+        self._stateThread = threading.Thread(target=self.listenStateMulticast, daemon=True)
+        self._stateThread.start()
+        print(f"Listening for state multicast on {STATE_MULTICAST_GROUP}:{STATE_MULTICAST_PORT}")
+
+    def listenStateMulticast(self):
+        """Receive official state multicast packets and apply them on the UI thread."""
+        while not self.stateEvent.isSet():
+            try:
+                data, address = self.stateSocket.recvfrom(1024)
+                packet = decode_state_packet(data)
+                if packet['is_server']:
+                    print(f"State multicast received from {address[0]}:{address[1]}: {packet['state']} v{packet['version']}")
+                    self.master.after(0, self.applyServerState, packet['state'], packet['version'])
+                else:
+                    print(f"Ignoring non-server state multicast from {address[0]}:{address[1]}")
+            except socket.timeout:
+                continue
+            except OSError:
+                break
+            except Exception as e:
+                print(f"Ignoring invalid state multicast packet: {e}")
+
+    def applyServerState(self, streamState, version):
+        """Update local playback from the server's official multicast state."""
+        if version <= self.lastStateVersion:
+            return
+        self.lastStateVersion = version
+        self.serverStreamState = streamState
+
+        if streamState == STREAM_READY:
+            if self.state == self.INIT:
+                if not self.setupInProgress:
+                    print("Server stream is READY; auto-sending SETUP for this client")
+                    self.setupInProgress = True
+                    self.transport = "UDP"
+                    self.sendRtspRequest(self.SETUP)
+                return
+            self.state = self.READY
+            self.isDraining = False
+            self.pendingPause = False
+            self.pauseInProgress = False
+            self.pause.config(state=NORMAL)
+            if hasattr(self, 'playEvent'):
+                self.playEvent.set()
+
+        elif streamState == STREAM_PLAYING:
+            if self.state == self.INIT:
+                if not self.setupInProgress:
+                    print("Server stream is PLAYING; auto-sending SETUP for this client")
+                    self.setupInProgress = True
+                    self.transport = "UDP"
+                    self.sendRtspRequest(self.SETUP)
+                return
+            if self.state == self.READY:
+                self.startPlaybackPipeline(sendRtsp=False)
+
+        elif streamState == STREAM_PAUSED:
+            if self.state == self.INIT:
+                return
+            self.state = self.READY
+            self.isDraining = False
+            self.pendingPause = False
+            self.pauseInProgress = False
+            self.isBuffering = False
+            if hasattr(self, 'playEvent'):
+                self.playEvent.set()
+            self.pause.config(state=NORMAL)
+
+        elif streamState == STREAM_STOPPED:
+            self.state = self.INIT
+            self.isDraining = False
+            self.pendingSetup = False
+            self.pendingPause = False
+            self.pauseInProgress = False
+            self.setupInProgress = False
+            self.isBuffering = True
+            self.frameNbr = -1
+            if hasattr(self, 'playEvent'):
+                self.playEvent.set()
+            with self.bufferLock:
+                self.frameBuffer.clear()
+            self.pause.config(state=NORMAL)
+
+    def closeStateListener(self):
+        """Stop the state multicast listener."""
+        self.stateEvent.set()
+        if self.stateSocket:
+            try:
+                self.stateSocket.close()
+            except:
+                pass
     
     def sendRtspRequest(self, requestCode):
         """Send RTSP request to the server."""  
@@ -506,15 +543,26 @@ class Client:
                     if self.requestSent == self.SETUP:
                         # Update RTSP state.
                         self.state = self.READY
-                        
+                        self.setupInProgress = False
+
+                        with self.bufferLock:
+                            self.frameBuffer.clear()
+                        self.frameNbr = -1
+                        self.isBuffering = True
+
                         # Open RTP port.
-                        self.openRtpPort() 
+                        self.openRtpPort()
+                        if self.serverStreamState == STREAM_PLAYING:
+                            self.startPlaybackPipeline(sendRtsp=False)
                     elif self.requestSent == self.PLAY:
                         self.state = self.PLAYING
                     elif self.requestSent == self.PAUSE:
                         self.state = self.READY
+                        self.pauseInProgress = False
+                        self.pause.config(state=NORMAL)
                         # The play thread exits. A new thread is created on resume.
-                        self.playEvent.set()
+                        if hasattr(self, 'playEvent'):
+                            self.playEvent.set()
                     elif self.requestSent == self.TEARDOWN:
                         self.state = self.INIT
                         # Flag the teardownAcked to close the socket.
@@ -529,22 +577,21 @@ class Client:
             except:
                 pass
 
-        if self.transport == 'UDP':
-            self.rtpSocket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-            self.rtpSocket.settimeout(0.5)
+        self.rtpSocket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
+        self.rtpSocket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        if hasattr(socket, 'SO_REUSEPORT'):
             try:
-                self.rtpSocket.bind(('', self.rtpPort))
-            except:
-                tkMessageBox.showwarning('Unable to Bind', 'Unable to bind PORT=%d' %self.rtpPort)
-        else: # TCP
-            self.rtpSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            self.rtpSocket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-            try:
-                self.rtpSocket.bind(('', self.rtpPort))
-                self.rtpSocket.listen(1)
-                print(f"RTP/TCP socket listening on port {self.rtpPort}")
-            except:
-                tkMessageBox.showwarning('Unable to Bind', 'Unable to bind PORT=%d' %self.rtpPort)
+                self.rtpSocket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
+            except OSError:
+                pass
+        self.rtpSocket.settimeout(0.5)
+        try:
+            self.rtpSocket.bind(('', RTP_MULTICAST_PORT))
+            mreq = socket.inet_aton(RTP_MULTICAST_GROUP) + socket.inet_aton('0.0.0.0')
+            self.rtpSocket.setsockopt(socket.IPPROTO_IP, socket.IP_ADD_MEMBERSHIP, mreq)
+            print(f"Joined RTP multicast group {RTP_MULTICAST_GROUP}:{RTP_MULTICAST_PORT}")
+        except Exception as e:
+            tkMessageBox.showwarning('Unable to Join Multicast', f'Unable to join RTP multicast group {RTP_MULTICAST_GROUP}:{RTP_MULTICAST_PORT}: {e}')
 
     def handler(self):
         """Handler on explicitly closing the GUI window."""
