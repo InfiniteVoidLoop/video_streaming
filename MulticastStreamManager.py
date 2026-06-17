@@ -20,6 +20,35 @@ class MulticastStreamManager:
         self.state = STOPPED
         self.stateVersion = 0
         self.rtpSeq = 0
+        self.clientSessions = set()
+
+    def register_client(self, session):
+        """Track a client that joined the shared multicast stream."""
+        with self.lock:
+            self.clientSessions.add(session)
+            clientCount = len(self.clientSessions)
+
+        print(f"Multicast client registered: {session} ({clientCount} active)")
+
+    def unregister_client(self, session):
+        """Remove one client and stop the stream only when no clients remain."""
+        should_stop = False
+        with self.lock:
+            if session not in self.clientSessions:
+                return
+
+            self.clientSessions.remove(session)
+            clientCount = len(self.clientSessions)
+            should_stop = clientCount == 0
+
+            if should_stop:
+                self._stop_locked(close_socket=True)
+                self.state = STOPPED
+
+        print(f"Multicast client unregistered: {session} ({clientCount} active)")
+
+        if should_stop:
+            self._send_state_multicast(STOPPED)
 
     def setup(self, filename):
         """Prepare one shared video stream for multicast delivery."""
@@ -79,6 +108,7 @@ class MulticastStreamManager:
     def stop(self):
         """Stop the shared stream and release multicast resources."""
         with self.lock:
+            self.clientSessions.clear()
             self._stop_locked(close_socket=True)
             self.state = STOPPED
 

@@ -60,6 +60,7 @@ class ServerWorker:
         if requestType == self.SETUP:
             print("processing SETUP\n")
 
+            previousTransport = self.clientInfo.get('transport')
             transport_line = request[2]
             self.clientInfo['transport'] = 'UDP'
             if 'TCP' in transport_line:
@@ -70,6 +71,9 @@ class ServerWorker:
                 if 'client_port' in part:
                     self.clientInfo['rtpPort'] = part.split('=')[1].strip()
                     break
+
+            if previousTransport == 'UDP' and self.clientInfo.get('transport') == 'TCP':
+                self._unregisterMulticastClient()
 
             self._cleanupClientRtpResources()
 
@@ -91,6 +95,8 @@ class ServerWorker:
 
             # Send RTSP reply
             if setupSucceeded:
+                if self.clientInfo.get('transport', 'UDP') != 'TCP':
+                    self._registerMulticastClient()
                 self.replyRtsp(self.OK_200, seq[1])
 
         # Process PLAY request      
@@ -136,7 +142,7 @@ class ServerWorker:
                 if 'event' in self.clientInfo and self.clientInfo['event']:
                     self.clientInfo['event'].set()
             else:
-                self.streamManager.stop()
+                self._unregisterMulticastClient()
 
             self.replyRtsp(self.OK_200, seq[1])
             self.state = self.INIT
@@ -144,6 +150,32 @@ class ServerWorker:
             # Close the RTP socket
             if 'rtpSocket' in self.clientInfo and self.clientInfo['rtpSocket']:
                 self.clientInfo['rtpSocket'].close()
+
+    def close(self):
+        """Release resources owned by this RTSP client session."""
+        self._cleanupClientRtpResources()
+        self._unregisterMulticastClient()
+
+    def _registerMulticastClient(self):
+        if self.clientInfo.get('multicastRegistered'):
+            return
+
+        session = self.clientInfo.get('session')
+        if session is None:
+            return
+
+        self.streamManager.register_client(session)
+        self.clientInfo['multicastRegistered'] = True
+
+    def _unregisterMulticastClient(self):
+        if not self.clientInfo.get('multicastRegistered'):
+            return
+
+        session = self.clientInfo.get('session')
+        if session is not None:
+            self.streamManager.unregister_client(session)
+
+        self.clientInfo['multicastRegistered'] = False
 
     def _cleanupClientRtpResources(self):
         if 'event' in self.clientInfo and self.clientInfo['event']:
