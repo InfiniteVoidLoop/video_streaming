@@ -56,7 +56,7 @@
 \fancyhf{}
 
 \lhead{\itshape Computer Networks Lab Report}
-\rhead{\itshape Project: Video Streaming with RTSP and RTP}
+\rhead{\itshape Project: Video Streaming using IP Multicast}
 \lfoot{\itshape Group: Đặng Võ Hồng Phúc \& Trịnh Chấn Duy}
 \rfoot{Page \thepage}
 
@@ -66,7 +66,7 @@
 \fancypagestyle{plain}{%
   \fancyhf{}
   \lhead{\itshape Computer Networks Lab Report}
-  \rhead{\itshape Project: Video Streaming with RTSP and RTP}
+  \rhead{\itshape Project: Video Streaming using IP Multicast}
   \lfoot{\itshape Group: Đặng Võ Hồng Phúc \& Trịnh Chấn Duy}
   \rfoot{Page \thepage}
   \renewcommand{\headrulewidth}{1.2pt}
@@ -116,23 +116,22 @@
 \end{tikzpicture}
 
 \begin{center}
-% {\large\bf VIETNAM NATIONAL UNIVERSITY - HO CHI MINH CITY}\\
 {\large\bf UNIVERSITY OF SCIENCE}\\
-{\large\bf FACULTY OF INFORMATION TECHNOLOGY}\\[1cm]
-{---------------------o0o--------------------}\\[1.5cm]
+{\large\bf FACULTY OF INFORMATION TECHNOLOGY}\\[0.5cm]
+{---------------------o0o--------------------}\\[1cm]
 
 {\bf COURSE PROJECT REPORT\\NETWORK PROGRAMMING}\\[0.5cm]
 \rule{\linewidth}{0.5mm}\\[0.2cm]
-{\Large\bf PROJECT: REAL-TIME VIDEO STREAMING}\\
-\rule{\linewidth}{0.5mm}\\[2cm]
+{\Large\bf PROJECT: VIDEO STREAMING USING IP MULTICAST}\\
+\rule{\linewidth}{0.5mm}\\[1cm]
 
 % Note: logohcmus.jpg might not be present in all environments, so we add a fallback.
-\includegraphics[scale=0.15]{logohcmus.jpg}\\[0.5cm]
-\vspace{1cm}
+\includegraphics[width=0.25\textwidth]{logohcmus.jpg}\\[0.5cm]
+\vspace{0.5cm}
 
 \begin{minipage}{0.4\textwidth}
 \begin{flushleft}\large
-\emph{\textbf{Group Members:}}\\
+\textbf{Group Members:}\\
 \textbf{Đặng Võ Hồng Phúc}\\
 \textbf{Trịnh Chấn Duy}
 \end{flushleft}
@@ -140,7 +139,7 @@
 ~
 \begin{minipage}{0.4\textwidth}
 \begin{flushright}\large
-\emph{\textbf{Student IDs:}}\\
+\textbf{Student IDs:}\\
 \textbf{23120155}\\
 \textbf{23120419}
 \end{flushright}
@@ -161,20 +160,18 @@
 \chapter{Introduction and Specifications}
 
 \section{Project Overview}
-This laboratory report provides a comprehensive examination of the architecture, design, and implementation of a real-time video streaming application. The developed system operates on a standard client-server paradigm, leveraging the \textbf{Real-Time Streaming Protocol (RTSP)} for stateful control signaling over a reliable TCP connection, and the \textbf{Real-time Transfer Protocol (RTP)} for active media packetization and delivery.
+This laboratory report provides a comprehensive examination of the architecture, design, and implementation of a multicast video streaming application over IP. The developed system operates on a direct Server-to-Multicast paradigm where multiple clients join a multicast group to watch a shared stream without any individual, stateful connection overhead.
 
-The project addresses core challenges in multimedia communication over IP networks, specifically targeting robust performance and user experience. The key technical features implemented and discussed in this report include:
+The core objective of the project is to implement a streamlined, robust multicast framework that bypasses complex legacy protocols. The key technical features implemented and discussed in this report include:
 \begin{enumerate}
-    \item \textbf{Control Channel Signalling (RTSP)}: The implementation of a structured, state-machine driven protocol for session control (inclusive of SETUP, PLAY, PAUSE, and TEARDOWN routines).
-    \item \textbf{High-Concurrency I/O Multiplexing}: The server architecture has been modernized using a single-threaded, high-performance event loop utilizing Python's \texttt{selectors} module, replacing the traditional thread-per-client model.
-    \item \textbf{Media Delivery (RTP)}: The encapsulation of Motion JPEG (MJPEG) frames into standard RTP packets with a compliant 12-byte binary header (including version, payload type, sequence numbers, timestamps, marker bits, and SSRC).
-    \item \textbf{UDP Packet Fragmentation}: A robust mechanism for chunking large video frames that exceed the Maximum Transmission Unit (MTU) into multiple RTP sub-packets, with marker-bit-based reassembly on the client.
-    \item \textbf{Reliable TCP Transport Mode}: The introduction of \textbf{RTP-over-TCP} streaming. To prevent TCP byte-stream amalgamation, a custom 5-byte frame size header mechanism was engineered, facilitating stable, frame-by-frame transmission without packet loss or sequence reordering.
-    \item \textbf{Adaptive Quality Switching with Client-Side Caching}: The development of a dynamic quality toggle (SD $\leftrightarrow$ HD) within the client interface. The client maps SD to UDP transport and HD to TCP transport. A client-side frame buffer with a high/low water mark mechanism reduces jitter during playback, and a draining pipeline ensures seamless transitions when the user triggers a ``Setup Again'' to reset the stream.
+    \item \textbf{IP Multicast Architecture}: The server continuously broadcasts Motion JPEG (MJPEG) video frames to a specific UDP Multicast group (\texttt{239.1.1.1:5004}), eliminating the need for RTSP, RTP, TCP/UDP selection, or separate control/data channels. By leveraging IGMP (Internet Group Management Protocol), the network routers handle the duplication of packets to end clients, maintaining $O(1)$ server bandwidth complexity regardless of client count.
+    \item \textbf{Custom Packetization Protocol}: Standard RTP introduces significant byte overhead and parsing complexity. To optimize delivery, a minimal 10-byte custom packet header mechanism was designed to encapsulate frames, maintaining integrity while allowing for sequence tracking and packet loss detection.
+    \item \textbf{Real-Time Playback and Loss Detection}: The client concurrently listens to the multicast group, decodes received packets, tracks skipped frames for dynamic loss calculation, and renders the video in real-time utilizing a Tkinter GUI.
+    \item \textbf{Automatic Loop and Clean Group Management}: The server resets playback transparently upon video completion. The client correctly manages its network footprint by executing an IGMP Join upon execution and an IGMP Leave upon termination.
 \end{enumerate}
 
 \section{Group Members and Task Allocation}
-The project was executed collaboratively by the following team members. Both members contributed extensively to the research, design, implementation, and testing phases.
+The project was executed collaboratively by the following team members. Both members contributed extensively to the design, implementation, and testing phases.
 
 \begin{center}
 \begin{tabularx}{\textwidth}{l c X}
@@ -187,648 +184,206 @@ Trịnh Chấn Duy & 23120419 & 23120419@student.hcmus.edu.vn \\
 \end{tabularx}
 \end{center}
 
-\subsection{Work Division}
-The technical workload was distributed as follows to ensure cross-functional understanding of the entire codebase:
-\begin{center}
-\begin{tabularx}{\textwidth}{X l}
-\toprule
-\textbf{Assigned Tasks} & \textbf{Assigned Members} \\
-\midrule
-RTSP Client GUI and internal state-machine implementation & All Members \\
-RTP Packetization, V/P/X/CC/PT/SSRC header encoding & All Members \\
-UDP fragmentation and marker-bit chunk reassembly logic & All Members \\
-Server conversion to I/O Multiplexing event loop (\texttt{selectors}) & All Members \\
-TCP transport option and 5-byte length-prefix framing & All Members \\
-Client-side jitter buffer with high/low water marks & All Members \\
-Setup Again draining pipeline and quality re-negotiation & All Members \\
-System verification, testing, and report & All Members \\
-\bottomrule
-\end{tabularx}
-\end{center}
-
 \newpage
 
 % ==================== Chapter 2: Protocol Design ====================
 \chapter{System Architecture and Protocol Design}
 
-\section{RTSP State Machine and Control Signalling}
-The Real-Time Streaming Protocol (RTSP) functions as a stateful, out-of-band control protocol. In our implementation, RTSP operates over a reliable TCP channel (binding to an administrator-defined port). The RTSP protocol is responsible for establishing and modifying media sessions through three sequential states: \texttt{INIT}, \texttt{READY}, and \texttt{PLAYING}.
+\section{Multicast Streaming Paradigm}
+Unlike unicast models where a server must duplicate bandwidth for each connected client, IP Multicast operates by sending a single stream into the network. Routers and switches then duplicate the packets only where necessary, reaching all clients subscribed to the group.
 
 \begin{figure}[H]
-\centering
-\begin{tikzpicture}[node distance=4cm, auto]
-    \node[circle, draw, minimum size=2.5cm, fill=blue!10] (init) {\textbf{INIT}};
-    \node[circle, draw, minimum size=2.5cm, fill=green!10, right of=init] (ready) {\textbf{READY}};
-    \node[circle, draw, minimum size=2.5cm, fill=red!10, right of=ready] (playing) {\textbf{PLAYING}};
-    
-    \path[->, >=stealth, thick] 
-        (init) edge node[above] {SETUP} (ready)
-        (ready) edge[bend left] node[above] {PLAY} (playing)
-        (playing) edge[bend left] node[below] {PAUSE} (ready)
-        (playing) edge[bend left=45] node[below, yshift=-0.5cm] {TEARDOWN} (init)
-        (ready) edge[bend right=45] node[above, yshift=0.5cm] {TEARDOWN} (init);
-\end{tikzpicture}
-\caption{RTSP Session Control State Machine}
+    \centering
+    \begin{tikzpicture}[node distance=4cm, auto]
+        \node[circle, draw, minimum size=2.0cm, fill=blue!10] (server) {\textbf{Server}};
+        \node[circle, draw, minimum size=2.0cm, fill=green!10, right of=server, xshift=1cm] (group) {\textbf{239.1.1.1:5004}};
+        
+        \node[circle, draw, minimum size=2.0cm, fill=red!10, right of=group, yshift=2cm] (client1) {\textbf{Client 1}};
+        \node[circle, draw, minimum size=2.0cm, fill=red!10, right of=group] (client2) {\textbf{Client 2}};
+        \node[circle, draw, minimum size=2.0cm, fill=red!10, right of=group, yshift=-2cm] (client3) {\textbf{Client N}};
+        
+        \path[->, >=stealth, thick] 
+            (server) edge node[above] {UDP Packets} (group)
+            (group) edge (client1)
+            (group) edge (client2)
+            (group) edge (client3);
+    \end{tikzpicture}
+    \caption{Server-Multicast Group Architecture Diagram}
 \end{figure}
 
-The text-based RTSP protocol requires strict header parsing. The \texttt{CSeq} (Command Sequence Number) is incremented by one for each sequential request to maintain synchronization. The \texttt{Session} header maintains the transaction binding between the client and server throughout the lifecycle of a streaming session.
+The server does not know who the clients are, nor does it keep any TCP connection open. It blindly packetizes the MJPEG video and transmits datagrams at approximately 20 frames per second (50ms per frame). Because the server does not handle client acknowledgments or connection states, its CPU and Memory utilization remain flat even if thousands of clients join the stream.
 
-\subsection{Extended SETUP for Transport Negotiation}
-Our system extends the standard SETUP request to dynamically negotiate the transport protocol. The client determines the transport based on the selected quality: selecting \textbf{SD} maps to \texttt{RTP/UDP}, while selecting \textbf{HD} maps to \texttt{RTP/TCP}. The \texttt{Transport} header is the sole mechanism for this negotiation --- the server reads only this header to determine whether to stream via UDP or TCP:
-\begin{lstlisting}[caption=RTSP SETUP request with Transport negotiation]
-SETUP movie.Mjpeg RTSP/1.0
-CSeq: 1
-Transport: RTP/TCP; client_port= 25000
-\end{lstlisting}
 
-\subsection{Re-SETUP for Quality Switching}
-A distinctive feature of our implementation is that the server accepts \texttt{SETUP} requests from \textbf{any state}, not just \texttt{INIT}. When a \texttt{SETUP} arrives while the server is in \texttt{PLAYING} state, it gracefully stops the current sending thread, closes the existing RTP socket, creates a fresh \texttt{VideoStream} (resetting to frame 0), and transitions back to \texttt{READY}. This enables seamless quality switching without full session teardown.
 
-\section{RTP Packetization and UDP Fragmentation}
-The RTP protocol encapsulates video payloads with a standard 12-byte binary header. When utilizing UDP as the underlying transport mechanism, the payload size is strictly constrained by the network's Maximum Transmission Unit (MTU). Standard Ethernet MTU is 1500 bytes. Deducting the IP header (20 bytes) and the UDP header (8 bytes) yields a maximum UDP payload of 1472 bytes. Deducting the 12-byte RTP header gives a maximum safe video payload of 1460 bytes. We conservatively selected \textbf{1400 bytes} as our maximum chunk size (\texttt{MAX\_RTP\_PAYLOAD\_SIZE}).
+\section{Custom Packet Format}
+Instead of relying on standard but bloated protocols like RTP, a \textbf{Custom Packet Format} was devised. This provides exactly the information the client needs to reassemble the data and calculate packet loss without any unnecessary overhead.
 
-Since a single MJPEG frame often exceeds this limit (sometimes reaching 6--10 KB), we engineered a fragmentation algorithm:
+The header format consists of exactly 10 bytes arranged in Big-Endian (Network) byte order:
+\begin{itemize}
+    \item \textbf{Magic Number (2 bytes)}: \texttt{0x1234}, used to verify that the incoming packet actually belongs to our streaming application and isn't random network noise.
+    \item \textbf{Frame Number (4 bytes)}: An unsigned integer incrementing continuously. Essential for the client to detect missing packets and calculate the loss rate.
+    \item \textbf{Payload Length (4 bytes)}: An unsigned integer dictating the size of the MJPEG frame appended immediately following the header.
+\end{itemize}
+
+By limiting the header to 10 bytes, the payload to header ratio is vastly improved compared to a 12-byte RTP header plus potential extension headers, allowing for maximum data throughput.
+
+\section{Concurrent Clients and Loss Detection Algorithm}
+Since UDP Multicast provides no guarantee of delivery, packets may be dropped by the network (due to router congestion or buffer overflow). The client tracks the \texttt{Frame Number} extracted from the Custom Packet header. 
+
+The algorithm operates as follows:
 \begin{enumerate}
-    \item \textbf{MTU Fragmentation}: If a raw MJPEG frame exceeds 1400 bytes, the server slices the byte-array into $N$ consecutive chunks using a \texttt{while bytesSent < frameSize} loop.
-    \item \textbf{Marker Bit (M)}: The RTP marker bit (bit 8 in the second header byte) plays a crucial role. It is set to \texttt{0} for intermediate chunks and \texttt{1} exclusively for the final chunk of a given frame. This is computed dynamically as \texttt{(bytesSent + chunkSize) == frameSize}.
-    \item \textbf{Sequence Numbers}: The RTP sequence number (\texttt{rtpSeq}) is incremented for each individual fragment chunk, not just per frame. This allows the client to identify lost or out-of-order packets at the chunk level.
-    \item \textbf{Client Reassembly}: The client constantly reads UDP datagrams, decodes the RTP header, extracts sequence numbers, and appends payloads into a RAM buffer. Upon receiving a packet with a marker bit of \texttt{1}, the client flushes the buffer, joins the segments into a complete JPEG image, and enqueues it into the frame buffer.
+    \item When the first packet arrives, the client sets \texttt{expected\_frame} to \texttt{frame\_number + 1}.
+    \item For subsequent packets, if \texttt{frame\_number > expected\_frame}, the difference represents the exact number of frames lost during transit.
+    \item The client accumulates \texttt{lost\_frames} and updates the \texttt{expected\_frame} variable.
+    \item A real-time UI widget continuously updates the total received packets, lost packets, and the loss percentage formula: 
+    $$ \text{Loss Rate (\%)} = \frac{\text{lost\_frames}}{\text{lost\_frames} + \text{received\_frames}} \times 100 $$
 \end{enumerate}
 
-\section{Reliable Frame-by-Frame TCP Media Stream}
-While UDP is suitable for low-latency, loss-tolerant streams, high-definition (HD) video demands absolute reliability. Over UDP, a single lost chunk corrupts the entire reassembled frame, resulting in visual artifacts. To resolve this, we implemented an \textbf{RTP-over-TCP} media stream.
-
-\textbf{The Framing Problem}: 
-TCP is a stream-oriented protocol. It guarantees delivery and order but does not preserve message boundaries. If the server sends two 5KB frames back-to-back, the client's \texttt{recv()} call might read parts of both frames simultaneously, completely corrupting the JPEG decoding process.
-
-\textbf{The Solution}:
-We engineered a custom framing protocol. Before transmitting a frame, the server calculates its exact byte length and prepends this length as a \textbf{5-byte zero-padded ASCII string} (e.g., \texttt{"06742"}). The client reads exactly 5 bytes from the socket to determine the payload size, then invokes a specialized \texttt{recv\_all(length)} function to extract exactly that many bytes. This completely bypasses the fragmentation and sequence tracking overhead of UDP, delivering each frame as a single, intact unit.
-
-\subsection{TCP Connection Establishment}
-For TCP media delivery, the roles are reversed compared to the control channel: the \textbf{client} acts as the TCP listener (\texttt{socket.listen(1)}) on the RTP port, and the \textbf{server} connects to the client after receiving a \texttt{PLAY} request. The client uses \texttt{SO\_REUSEADDR} to allow rapid port rebinding when switching quality.
-
-\section{Client-Side Caching and Jitter Buffer}
-The client-side caching mechanism implements a \textbf{producer-consumer} architecture with a shared frame buffer to decouple network I/O from GUI rendering:
-
-\begin{enumerate}
-    \item \textbf{Producer (Network Thread)}: The \texttt{listenRtpWithUDP} or \texttt{listenRtpWithTCP} method runs in a background thread. Instead of directly updating the GUI, it appends complete frames into a shared \texttt{frameBuffer} list (capacity: 100 frames), protected by a \texttt{threading.Lock} (\texttt{bufferLock}).
-    \item \textbf{Consumer (GUI Render Loop)}: The \texttt{renderClientBufferLoop} method is scheduled via Tkinter's \texttt{master.after()} mechanism. It pops frames from the buffer at a fixed cadence (every 40ms, approximately 25 fps) and calls \texttt{updateMovie()} to render each frame.
-    \item \textbf{High Water Mark}: When the buffer is empty and new playback begins, the consumer enters a \textbf{buffering} state (\texttt{isBuffering = True}). It waits until the buffer accumulates at least \texttt{minBufferSize} (15) frames before beginning to render. This pre-buffering absorbs network jitter and provides a smooth initial playback experience.
-    \item \textbf{Low Water Mark / Starvation Recovery}: If the buffer drains to zero during normal playback (\texttt{len(frameBuffer) == 0}), the consumer re-enters the buffering state and waits for the high water mark to be reached again.
-\end{enumerate}
-
-\section{Setup Again: Draining Pipeline and Stream Reset}
-The ``Setup Again'' feature allows the user to click the \texttt{Setup} button at any point during playback or pause to reset the video stream and choose a new quality. The implementation uses a \textbf{draining pipeline} to ensure a graceful transition:
-
-\begin{enumerate}
-    \item \textbf{During PLAYING state}: When the user clicks Setup, the system sets \texttt{pendingSetup = True} and calls \texttt{startDrainingPipeline()}. This signals the network thread to stop (\texttt{playEvent.set()}) and sets \texttt{isDraining = True}. The render loop continues to pop and display remaining buffered frames.
-    \item \textbf{Buffer Drain}: The \texttt{renderClientBufferLoop} detects \texttt{isDraining == True} and skips the buffering check, directly consuming frames until the buffer is empty.
-    \item \textbf{Transition}: Once the buffer is fully drained, the render loop checks \texttt{pendingSetup}. If true, it resets the client state to \texttt{INIT} and triggers \texttt{chooseQuality()} to display the quality selection dialog.
-    \item \textbf{During READY (Paused) state}: The buffer is cleared immediately, state resets to \texttt{INIT}, and the quality dialog appears instantly.
-    \item \textbf{Server Re-SETUP}: On the server side, the SETUP handler cleans up any previous session resources (stops old sending thread, closes old RTP socket) and creates a fresh \texttt{VideoStream} from the beginning. The session ID is preserved to avoid breaking the RTSP control channel.
-\end{enumerate}
+Multiple clients can operate on the same machine or network independently. They will each calculate statistics based on the exact moment they executed the IGMP join command, demonstrating accurate per-client network diagnostics.
 
 \newpage
 
 % ==================== Chapter 3: Implementation ====================
 \chapter{Code Implementation Details}
-This chapter provides an in-depth analysis of the source code, highlighting the advanced features implemented to meet the project's specifications.
+This chapter highlights the core components implemented in Python, particularly focusing on the usage of the \texttt{socket} and \texttt{struct} libraries for low-level network manipulation.
 
-\section{High-Performance Server I/O Multiplexing}
-Spawning a separate thread for every connected client is inefficient, leading to context-switching overhead and poor scalability. To support high-concurrency client streams, we refactored \texttt{Server.py} to utilize \textbf{I/O Multiplexing} via Python's \texttt{selectors} module.
+\section{Custom Packet Encoding/Decoding (\texttt{CustomPacket.py})}
+The \texttt{CustomPacket.py} module uses Python's \texttt{struct} library for rapid binary serialization using network byte order (\texttt{!}). The \texttt{H} format character maps to a 2-byte unsigned short (Magic Number), and the two \texttt{I} characters map to 4-byte unsigned integers (Frame Number and Payload Length).
 
-\begin{lstlisting}[language=Python, caption=Server.py - Non-blocking Event Loop]
-class Server:   
-    def __init__(self):
-        self.serverWorkers = {}
-        self.selectors = selectors.DefaultSelector()
+\begin{lstlisting}[language=Python, caption=CustomPacket.py - Header Structure]
+import struct
+
+class CustomPacket:
+    MAGIC = 0x1234
+    HEADER_FORMAT = "!HII"
+    HEADER_SIZE = struct.calcsize(HEADER_FORMAT)
     
-    def accept_client(self, rtspSocket):
-        try: 
-            clientSocket, clientAddress = rtspSocket.accept()
-            clientSocket.setblocking(False) # Critical: Non-blocking mode
-            clientInfo = {'rtspSocket': (clientSocket, clientAddress)}
-
-            worker = ServerWorker(clientInfo)
-            self.serverWorkers[clientSocket] = worker
-            # Register the new client socket for read events
-            self.selectors.register(clientSocket, selectors.EVENT_READ, 
-                                    self.handle_client_request)
-        except Exception as e:
-            print(f"Error accepting client: {e}")
-
-    def handle_client_request(self, clientSocket):
-        worker = self.serverWorkers.get(clientSocket)
-        if worker:
-            try:
-                worker.recvRtspRequest()
-            except Exception as e:
-                print(f"Cleaning up disconnected client: {e}")
-                try:
-                    self.selectors.unregister(clientSocket)
-                except:
-                    pass
-                clientSocket.close()
-                if clientSocket in self.serverWorkers:
-                    del self.serverWorkers[clientSocket]
-
-    def main(self):
-        rtspSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        rtspSocket.bind(('', SERVER_PORT))
-        rtspSocket.listen(5)        
-        rtspSocket.setblocking(False)
-        self.selectors.register(rtspSocket, selectors.EVENT_READ, 
-                                self.accept_client)
-        # The Event Loop
-        while True:
-            events = self.selectors.select()
-            for key, mask in events:
-                callback = key.data
-                callback(key.fileobj)
-\end{lstlisting}
-
-The server socket and all incoming client sockets are explicitly set to non-blocking mode (\texttt{setblocking(False)}). The primary server loop halts at \texttt{self.selectors.select()}, waiting for OS-level interrupts indicating readable events. When data arrives, it dispatches the RTSP commands to the appropriate \texttt{ServerWorker} without launching redundant threads.
-
-\subsection{Non-blocking Socket and BlockingIOError Handling}
-Because all client sockets operate in non-blocking mode, the \texttt{recvRtspRequest} method in \texttt{ServerWorker.py} must handle \texttt{BlockingIOError}, which is raised when \texttt{recv()} is called on a non-blocking socket with an empty kernel buffer. The exception is silently caught and the method returns, allowing the event loop to continue monitoring other sockets:
-\begin{lstlisting}[language=Python, caption=ServerWorker.py - Non-blocking RTSP Reception]
-def recvRtspRequest(self):
-    connSocket = self.clientInfo['rtspSocket'][0]
-    try:
-        while True:            
-            data = connSocket.recv(256)
-            if data:
-                self.processRtspRequest(data.decode("utf-8"))
-            else:
-                raise ConnectionError("Client disconnected")
-    except BlockingIOError:
-        pass  # No data available yet, return to event loop
-\end{lstlisting}
-
-\subsection{Graceful Client Disconnection Cleanup}
-When a client disconnects (detected by \texttt{recv()} returning empty bytes or raising a \texttt{ConnectionError}), the exception propagates to \texttt{handle\_client\_request} in \texttt{Server.py}, which performs cleanup: unregistering the socket from the selector, closing the socket, and removing the worker from the dictionary. This prevents stale file descriptors from accumulating.
-
-\section{RTP Packetization and Binary Header Encoding}
-The \texttt{RtpPacket.py} module implements the standard 12-byte RTP header encoding according to RFC 1889:
-
-\begin{lstlisting}[language=Python, caption=RtpPacket.py - 12-byte RTP Header Encoding]
-def encode(self, version, padding, extension, cc, seqnum, 
-           marker, pt, ssrc, payload):
-    timestamp = int(time())
-    header = bytearray(HEADER_SIZE)
-
-    # Byte 0: V(2) | P(1) | X(1) | CC(4)
-    header[0] = (version << 6) | (padding << 5) | \
-                (extension << 4) | (cc & 0x0F)                    
-    # Byte 1: M(1) | PT(7)
-    header[1] = (marker << 7) | (pt & 0x7F)
-    # Bytes 2-3: Sequence Number (16-bit, big-endian)
-    header[2] = (seqnum >> 8) & 0xFF
-    header[3] = seqnum & 0xFF
-    # Bytes 4-7: Timestamp (32-bit, big-endian)
-    header[4] = (timestamp >> 24) & 0xFF
-    header[5] = (timestamp >> 16) & 0xFF
-    header[6] = (timestamp >> 8) & 0xFF
-    header[7] = timestamp & 0xFF
-    # Bytes 8-11: SSRC (32-bit, big-endian)
-    header[8] = (ssrc >> 24) & 0xFF
-    header[9] = (ssrc >> 16) & 0xFF
-    header[10] = (ssrc >> 8) & 0xFF
-    header[11] = ssrc & 0xFF
-
-    self.header = header
-    self.payload = payload
-\end{lstlisting}
-
-The header fields are filled byte-by-byte using bitwise shift and mask operations. Since Python's byte order matches network byte order (big-endian), no additional byte-order transformation is required. The \texttt{decode} method performs the reverse: extracting the 12-byte header and payload from a received byte stream, with accessor methods for \texttt{version()}, \texttt{seqNum()}, \texttt{marker()}, \texttt{timestamp()}, and \texttt{payloadType()}.
-
-\section{UDP Fragmentation Logic}
-The \texttt{ServerWorker.py} script manages the fragmentation of large JPEG frames to fit within the UDP MTU constraints:
-
-\begin{lstlisting}[language=Python, caption=ServerWorker.py - UDP Fragmentation with Marker Bit]
-def sendRtpWithUDP(self):
-    MAX_RTP_PAYLOAD_SIZE = 1400
-    while True:
-        self.clientInfo['event'].wait(0.05) 
-        if self.clientInfo['event'].isSet(): 
-            break 
-            
-        data = self.clientInfo['videoStream'].nextFrame()
-        if data: 
-            frameSize = len(data)
-            bytesSent = 0
-            while bytesSent < frameSize:
-                chunkSize = min(MAX_RTP_PAYLOAD_SIZE, 
-                                frameSize - bytesSent)
-                chunkData = data[bytesSent:bytesSent + chunkSize]
-                # Marker bit = 1 ONLY for the final chunk
-                markerBit = (bytesSent + chunkSize) == frameSize
-                
-                packet = self.makeRtp(chunkData, self.rtpSeq, 
-                                      markerBit)
-                self.clientInfo['rtpSocket'].sendto(
-                    packet, (address, port))
-                    
-                self.rtpSeq += 1
-                bytesSent += chunkSize
-\end{lstlisting}
-The \texttt{while bytesSent < frameSize} loop slices the byte array into chunks of at most 1400 bytes. The \texttt{markerBit} is computed dynamically by checking if the current chunk boundary aligns with the total \texttt{frameSize}. This ensures the client can detect frame boundaries even when a single frame is split across many UDP datagrams.
-
-\subsection{Client-Side UDP Reassembly}
-On the client side, fragments are reassembled using a temporary buffer that accumulates chunk payloads until the marker bit signals the end of a frame:
-\begin{lstlisting}[language=Python, caption=Client.py - UDP Fragment Reassembly]
-def listenRtpWithUDP(self):
-    buffer = []
-    while not self.playEvent.isSet():
-        try:
-            data = self.rtpSocket.recv(2000)
-            if data:
-                rtpPacket = RtpPacket()
-                rtpPacket.decode(data)
-                currSeqNbr = rtpPacket.seqNum()
-
-                if currSeqNbr > self.frameNbr:
-                    self.frameNbr = currSeqNbr
-                    buffer.append(rtpPacket.getPayload())
-
-                    if rtpPacket.marker() == 1:
-                        fullFrame = b''.join(buffer)
-                        buffer.clear()
-                        with self.bufferLock:
-                            self.frameBuffer.append(fullFrame)
-                            if len(self.frameBuffer) > 100:
-                                self.frameBuffer.pop(0)
-        except:
-            buffer.clear()
-            if self.playEvent.isSet(): break
-\end{lstlisting}
-Late or out-of-order packets are discarded via the \texttt{currSeqNbr > self.frameNbr} guard. Once the marker bit is detected (\texttt{marker() == 1}), the accumulated chunks are joined with \texttt{b''.join(buffer)} and appended to the shared \texttt{frameBuffer} under lock protection. A hard cap of 100 frames prevents unbounded memory growth.
-
-\section{Reliable TCP Stream Framing Protocol}
-To circumvent TCP's inherent byte-stream nature, we engineered a custom 5-byte length prefix system.
-
-\subsection{Server-side Transmission}
-\begin{lstlisting}[language=Python, caption=ServerWorker.py - TCP 5-byte Length-Prefix Framing]
-def sendRtpWithTCP(self):
-    while True:
-        self.clientInfo['event'].wait(0.05) 
-        if self.clientInfo['event'].isSet(): 
-            break 
-            
-        data = self.clientInfo['videoStream'].nextFrame()
-        if data: 
-            frameSize = len(data)
-            # 5-byte ASCII size header, zero-padded (e.g. "06742")
-            sizeHeader = str(frameSize).zfill(5).encode()
-            # Send header + payload atomically
-            self.clientInfo['rtpSocket'].sendall(sizeHeader + data)
-\end{lstlisting}
-
-\subsection{Client-side Reception}
-On the client side, \texttt{Client.py} employs a strict \texttt{recv\_all} loop to guarantee no partial reads occur:
-
-\begin{lstlisting}[language=Python, caption=Client.py - Precise TCP Reception with recv\_all]
-def listenRtpWithTCP(self):
-    # Client listens; server connects after PLAY
-    self.rtpSocket.settimeout(5.0)
-    self.rtpConnection, addr = self.rtpSocket.accept()
-    self.rtpConnection.settimeout(0.5)
-    
-    while not self.playEvent.isSet():
-        # Read exactly 5 bytes for the length prefix
-        length_bytes = self.recv_all(self.rtpConnection, 5)
-        if not length_bytes: break
+    @staticmethod
+    def encode(frame_num, payload):
+        header = struct.pack(CustomPacket.HEADER_FORMAT, 
+                             CustomPacket.MAGIC, frame_num, len(payload))
+        return header + payload
         
-        length = int(length_bytes.decode())
-        data = self.recv_all(self.rtpConnection, length)
-        if not data: break
-
-        with self.bufferLock:
-            self.frameBuffer.append(data)
-            if len(self.frameBuffer) > 100:
-                self.frameBuffer.pop(0)
-
-def recv_all(self, sock, n):
-    """Receive exactly n bytes from a TCP socket."""
-    data = b''
-    while len(data) < n:
-        try:
-            packet = sock.recv(n - len(data))
-            if not packet:
-                return None
-            data += packet
-        except socket.timeout:
-            if len(data) > 0:
-                continue
-            else:
-                raise
-    return data
-\end{lstlisting}
-The \texttt{recv\_all} function loops until exactly $n$ bytes have been received. Socket timeouts are handled gracefully: if a partial read has already occurred, the function continues waiting; otherwise, it re-raises the timeout to allow the outer loop to check for \texttt{playEvent}.
-
-\section{Client-Side Jitter Buffer and Render Loop}
-The render loop is the heart of the client-side caching system, implementing the consumer side of the producer-consumer pattern:
-
-\begin{lstlisting}[language=Python, caption=Client.py - renderClientBufferLoop (Jitter Buffer Consumer)]
-def renderClientBufferLoop(self):
-    if self.state != self.PLAYING and not self.isDraining:
-        return
-
-    with self.bufferLock:
-        # High Water Mark: wait for minBufferSize frames
-        if self.isBuffering and not self.isDraining:
-            if len(self.frameBuffer) >= self.minBufferSize:
-                self.isBuffering = False
-            else: 
-                self.master.after(40, self.renderClientBufferLoop)
-                return
-
-        if len(self.frameBuffer) > 0:
-            frame_bytes = self.frameBuffer.pop(0)
-            self.updateMovie(self.writeFrame(frame_bytes))
-        else:
-            if self.isDraining:
-                # Buffer fully drained
-                self.isDraining = False
-                self.state = self.INIT
-                self.frameNbr = -1
-                if self.pendingPause:
-                    self.pendingPause = False
-                    self.state = self.READY
-                elif self.pendingSetup:
-                    self.pendingSetup = False
-                    self.state = self.INIT
-                    self.chooseQuality()                 
-                return
-            else:
-                # Starvation: re-enter buffering
-                self.isBuffering = True
-
-    # Schedule next frame render (~25fps)
-    self.master.after(40, self.renderClientBufferLoop)
+    @staticmethod
+    def decode(data):
+        if len(data) < CustomPacket.HEADER_SIZE:
+            return None, None
+        header = data[:CustomPacket.HEADER_SIZE]
+        magic, frame_num, length = struct.unpack(CustomPacket.HEADER_FORMAT, header)
+        if magic != CustomPacket.MAGIC:
+            return None, None
+        payload = data[CustomPacket.HEADER_SIZE:CustomPacket.HEADER_SIZE+length]
+        return frame_num, payload
 \end{lstlisting}
 
-Key design decisions:
-\begin{itemize}
-    \item The render loop uses \texttt{master.after()} (Tkinter's non-blocking timer) instead of a separate thread. This ensures all GUI updates occur on the main thread, avoiding Tkinter's well-known thread-safety issues.
-    \item The \texttt{bufferLock} mutex protects the shared \texttt{frameBuffer} list from concurrent access by the network producer thread.
-    \item The draining pipeline integrates naturally: when \texttt{isDraining} is true, the buffering check is bypassed, and the loop pops frames until the buffer is empty.
-\end{itemize}
+\section{Server Implementation (\texttt{Server.py})}
+The Server script binds a UDP socket, applies the IP Multicast Time-To-Live (TTL) configuration (\texttt{IP\_MULTICAST\_TTL}), and streams the MJPEG file frame-by-frame. A TTL of 2 ensures that the stream can pass through the local subnet to adjacent routers, though it can be adjusted for broader WAN distribution. Upon reaching the file's end, it automatically seeks back to the 0th byte.
 
-\section{Setup Again: Server-Side Re-SETUP Handler}
-The server's \texttt{processRtspRequest} method was extended to accept SETUP from any state, enabling mid-session quality switching:
+\begin{lstlisting}[language=Python, caption=Server.py - Core Multicast Loop]
+sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
+sock.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_TTL, 2)
 
-\begin{lstlisting}[language=Python, caption=ServerWorker.py - Re-SETUP Handler for Quality Switching]
-if requestType == self.SETUP:
-    # Clean up previous session resources if they exist
-    if 'event' in self.clientInfo and self.clientInfo['event']:
-        try: self.clientInfo['event'].set()
-        except: pass
-    if 'worker' in self.clientInfo and self.clientInfo['worker']:
-        try: self.clientInfo['worker'].join(timeout=0.2)
-        except: pass
-    if 'rtpSocket' in self.clientInfo and self.clientInfo['rtpSocket']:
-        try: self.clientInfo['rtpSocket'].close()
-        except: pass            
-    
-    # Create fresh VideoStream (resets to frame 0)
-    self.clientInfo['videoStream'] = VideoStream(filename)
-    self.state = self.READY
-    self.rtpSeq = 0
-    
-    # Preserve session ID for RTSP control channel continuity
-    if self.clientInfo.get('session') is None:
-        self.clientInfo['session'] = randint(100000, 999999)
-    
-    self.replyRtsp(self.OK_200, seq[1])
-    
-    # Parse Transport header (UDP or TCP)
-    transport_line = request[2]
-    self.clientInfo['transport'] = 'UDP'
-    if 'TCP' in transport_line:
-        self.clientInfo['transport'] = 'TCP'
+while True:
+    frame = video_stream.nextFrame()
+    if frame is None:
+        video_stream.reset() # Replay video automatically
+        continue
+        
+    packet = CustomPacket.encode(video_stream.frameNum, frame)
+    sock.sendto(packet, (MULTICAST_GROUP, MULTICAST_PORT))
+    time.sleep(0.05) # Delay to enforce ~20 FPS pacing
 \end{lstlisting}
 
-The handler first checks for and cleans up any existing session resources (event, worker thread, RTP socket). It then creates a fresh \texttt{VideoStream}, resetting playback to frame 0. The session ID is preserved (only generated on the first SETUP) to maintain RTSP control channel continuity.
+\section{Client Implementation and GUI Threading (\texttt{Client.py})}
+The Client script uses \texttt{Tkinter} to construct the user interface. It binds a UDP socket with the \texttt{SO\_REUSEADDR} flag (and \texttt{SO\_REUSEPORT} on supported OSs), allowing multiple clients to run simultaneously on the same host and listen to the same port. It then issues an IGMP Join request via \texttt{IP\_ADD\_MEMBERSHIP}.
 
-\section{Client-Side Quality Selection UI}
-The client presents a styled modal dialog for quality selection, built with Tkinter:
+Because Tkinter's \texttt{mainloop()} is blocking and must run on the main thread, the networking \texttt{receive\_loop} is offloaded to a background Daemon thread.
 
-\begin{lstlisting}[language=Python, caption=Client.py - Quality Selection Dialog]
-def chooseQuality(self):
-    self.quality_window = Toplevel(self.master)
-    self.quality_window.title("Video Quality")
-    self.quality_window.configure(bg="#1E1E1E")
-    
-    self.quality_var = StringVar(value="SD")
-    
-    rb_sd = Radiobutton(frame, text="SD (720p) - UDP", 
-                        variable=self.quality_var, value="SD", ...)
-    rb_hd = Radiobutton(frame, text="HD (1080p) - TCP", 
-                        variable=self.quality_var, value="HD", ...)
-    
-    # Modal behavior
-    self.quality_window.transient(self.master)
-    self.quality_window.grab_set()
-    self.master.wait_window(self.quality_window)
+\begin{lstlisting}[language=Python, caption=Client.py - Threading and Socket Setup]
+self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
+self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+self.sock.bind(('', MULTICAST_PORT))
 
-def confirmQuality(self):
-    self.quality = self.quality_var.get()
-    if self.quality == "HD":
-        self.transport = "TCP"
-    else:
-        self.transport = "UDP"
-    self.quality_window.destroy()
-    self.sendRtspRequest(self.SETUP)
+# Issue IGMP Join for Multicast Group 239.1.1.1
+mreq = socket.inet_aton(MULTICAST_GROUP) + socket.inet_aton('0.0.0.0')
+self.sock.setsockopt(socket.IPPROTO_IP, socket.IP_ADD_MEMBERSHIP, mreq)
+
+# Start background thread to avoid freezing GUI
+self.receive_thread = threading.Thread(target=self.receive_loop)
+self.receive_thread.daemon = True
+self.receive_thread.start()
 \end{lstlisting}
 
-The mapping is straightforward: SD (720p) uses UDP for low-latency delivery, while HD (1080p) uses TCP for reliable, lossless transmission. The dialog is modal (\texttt{grab\_set()} and \texttt{wait\_window()}), ensuring the user must make a selection before proceeding.
+The receive loop extracts the payload and schedules the UI update using \texttt{master.after(0, ...)} to ensure thread safety when modifying the Tkinter Label widget:
+
+\begin{lstlisting}[language=Python, caption=Client.py - Packet Reception and Thread-Safe UI Update]
+data, _ = self.sock.recvfrom(65536) # Max UDP Size buffer
+frame_num, payload = CustomPacket.decode(data)
+
+if frame_num is not None:
+    # Update loss tracking logic...
+    self.received_frames += 1
+    
+    # Safely dispatch image rendering back to the Main GUI Thread
+    self.master.after(0, self.update_display, payload)
+    self.master.after(0, self.update_stats)
+\end{lstlisting}
 
 \newpage
 
 % ==================== Chapter 4: Verification ====================
 \chapter{Verification and Experimental Results}
+This chapter provides visual evidence of the system operating successfully under specified constraints.
 
-\section{UDP Mode and MTU Fragmentation Tests}
-We rigorously tested the application under UDP mode. When streaming large frames, the server successfully identifies payloads exceeding 1400 bytes and splits them, sending consecutive RTP packets with incrementing sequence numbers. The client output verifies successful reassembly:
-\begin{lstlisting}[language=bash, caption=Client-side terminal output showing UDP fragmentation]
-Current Seq Num: 774
-Size of packet: 1412
-Current Seq Num: 775
-Size of packet: 1412
-Current Seq Num: 776
-Size of packet: 1173
-\end{lstlisting}
-This log demonstrates that a single frame of approximately 3985 payload bytes was successfully fragmented into two maximal chunks of 1400 payload bytes (plus 12 bytes RTP header, totalling 1412 bytes per packet) and a final chunk of 1161 payload bytes. The marker bit on the third packet triggered the client's buffer join, producing a valid JPEG that rendered correctly in the GUI.
-
-\section{RTSP Control Flow and Packet Capture Analysis}
-To validate the RTSP state machine and RTP transmission loop under UDP mode, we captured control packets and user interface transitions.
-
-\subsection{SETUP State and Quality Selection}
-The session starts with a SETUP request. Figure~\ref{fig:setup_ui} displays the SD/UDP selection dialog in the Tkinter GUI. Figures~\ref{fig:setup_client} and \ref{fig:setup_server} show the RTSP SETUP handshake where the client requests UDP transport, and the server acknowledges it by allocating ports and generating a unique session ID.
+\section{Server Operation and Initialization}
+The server successfully initializes using the command \texttt{python Server.py movie.Mjpeg}. Without waiting for any client handshakes, the server begins continuous injection of video packets into the \texttt{239.1.1.1} multicast group at port \texttt{5004}. This verifies the stateless architecture required by the specifications.
 
 \begin{figure}[H]
     \centering
-    \includegraphics[width=0.45\textwidth]{assets/setup_ui_udp.png}
-    \caption{Client Setup Dialog for Quality and Transport Selection (SD/UDP)}
-    \label{fig:setup_ui}
+    \includegraphics[width=0.8\textwidth]{assets/Server_Init.png}
+    \caption{Server terminal successfully running and broadcasting}
+    \label{fig:server_running}
 \end{figure}
+
+\section{Client Playback and Concurrency}
+Multiple instances of the client can be launched concurrently using \texttt{python Client.py}. Each instance independently joins the multicast group. Upon launch, the GUI displays a waiting state until the first video packets arrive, after which real-time playback initiates instantly.
 
 \begin{figure}[H]
     \centering
     \begin{minipage}{0.48\textwidth}
         \centering
-        \includegraphics[width=\textwidth]{assets/setup_packet_client.png}
-        \caption{Client RTSP SETUP Request Packet Log}
-        \label{fig:setup_client}
+        \includegraphics[width=\textwidth]{assets/client_waiting_stream.png}
+        \caption{Client GUI in waiting state}
+        \label{fig:client_waiting}
     \end{minipage}
     \hfill
     \begin{minipage}{0.48\textwidth}
         \centering
-        \includegraphics[width=\textwidth]{assets/setup_packet_server.png}
-        \caption{Server-Side RTSP SETUP Handshake Processing}
-        \label{fig:setup_server}
+        \includegraphics[width=\textwidth]{assets/Client_Init.png}
+        \caption{Client GUI displaying the video stream}
+        \label{fig:client_running}
     \end{minipage}
 \end{figure}
 
-\subsection{PLAY State and Media Flow}
-Clicking "Play" shifts the session to the PLAYING state. Figures~\ref{fig:play_client} and \ref{fig:play_server} show the RTSP PLAY request, corresponding server acknowledgment, and subsequent arrival of packetized RTP data blocks.
+This sequential rendering confirms that the application effectively leverages IP Multicast's inherent scalability capabilities to serve unlimited concurrent watchers with zero additional overhead on the server.
 
 \begin{figure}[H]
     \centering
-    \begin{minipage}{0.48\textwidth}
-        \centering
-        \includegraphics[width=\textwidth]{assets/play_packet_client_udp.png}
-        \caption{Client RTSP PLAY Transmission and RTP Packet Reception Log}
-        \label{fig:play_client}
-    \end{minipage}
-    \hfill
-    \begin{minipage}{0.48\textwidth}
-        \centering
-        \includegraphics[width=\textwidth]{assets/play_packet_server.png}
-        \caption{Server RTSP PLAY Acknowledgment Log}
-        \label{fig:play_server}
-    \end{minipage}
+    \includegraphics[width=0.8\textwidth]{assets/Client_running_2.png}
+    \caption{Multiple Client windows running simultaneously on the same screen}
+    \label{fig:multiple_clients}
 \end{figure}
 
-\subsection{PAUSE State}
-When paused, the client sends an RTSP PAUSE request. The server stops the RTP thread, updates the worker state to READY, and acknowledges the command (Figures~\ref{fig:pause_client} and \ref{fig:pause_server}). The client suspends visual rendering while retaining buffered frames.
+\section{Statistics, Loss Detection, and IGMP Leave}
+During execution, the loss detection logic performs exceptionally. Each UI instance displays its own live counter. If a network disruption occurs (or frames are deliberately dropped by temporarily suspending the server/client), the client accurately identifies the skipped frame numbers based on our Custom Packet header and updates the "Packets Lost" and "Loss Rate \%" counters dynamically. 
 
 \begin{figure}[H]
     \centering
-    \begin{minipage}{0.48\textwidth}
-        \centering
-        \includegraphics[width=\textwidth]{assets/pause_packet_client.png}
-        \caption{Client RTSP PAUSE Request Log}
-        \label{fig:pause_client}
-    \end{minipage}
-    \hfill
-    \begin{minipage}{0.48\textwidth}
-        \centering
-        \includegraphics[width=\textwidth]{assets/pause_packet_server.png}
-        \caption{Server RTSP PAUSE Processing and Acknowledgment}
-        \label{fig:pause_server}
-    \end{minipage}
+    \includegraphics[width=0.8\textwidth]{assets/Statistics.png}
+    \caption{Client GUI highlighting the "Packets Lost" and "Loss Rate" statistics}
+    \label{fig:client_loss}
 \end{figure}
 
-\subsection{TEARDOWN State and Resource Release}
-Upon termination, the client sends an RTSP TEARDOWN command. As shown in Figures~\ref{fig:teardown_client} and \ref{fig:teardown_server}, the server terminates the connection, unregisters the client socket from the selectors loop, and releases all resources.
-
-\begin{figure}[H]
-    \centering
-    \begin{minipage}{0.48\textwidth}
-        \centering
-        \includegraphics[width=\textwidth]{assets/teardown_packet_client.png}
-        \caption{Client RTSP TEARDOWN Command Execution}
-        \label{fig:teardown_client}
-    \end{minipage}
-    \hfill
-    \begin{minipage}{0.48\textwidth}
-        \centering
-        \includegraphics[width=\textwidth]{assets/teardown_packet_server.png}
-        \caption{Server TEARDOWN Cleanup and Socket Closure}
-        \label{fig:teardown_server}
-    \end{minipage}
-\end{figure}
-
-\section{TCP Mode and Frame-by-Frame Delivery}
-When TCP mode is selected via the quality dialog (HD option), the server connects to the client's listening socket and delivers frames with the 5-byte ASCII headers. Terminal output verifies the handshake and data integrity:
-\begin{lstlisting}[language=bash, caption=RTSP Setup and TCP Stream verification]
-Data sent:
-SETUP movie.Mjpeg RTSP/1.0
-CSeq: 1
-Transport: RTP/TCP; client_port= 25000
-
-Received RTSP reply: RTSP/1.0 200 OK
-CSeq: 1
-Session: 728783
-
-RTP/TCP socket listening on port 25000
-RTP/TCP connection established with server
-
-Received Frame over TCP
-Size of packet: 6014
-Received Frame over TCP
-Size of packet: 5940
-Received Frame over TCP
-Size of packet: 5925
-\end{lstlisting}
-Each frame is delivered as an uninterrupted single unit without any chunk splits. The \texttt{sendall()} call on the server and the strict \texttt{recv\_all()} loop on the client ensure complete, corruption-free frame delivery. No packet loss or visual tearing was observed during TCP streams.
-
-To verify the transport channel switch, control and media packets for HD/TCP mode were captured (Figures~\ref{fig:tcp_setup} and \ref{fig:tcp_play}). Figure~\ref{fig:tcp_setup} shows the RTSP SETUP establishing a session over \texttt{RTP/TCP}, where the client listens on port \texttt{25000} and the server connects to it. Figure~\ref{fig:tcp_play} shows the RTSP PLAY request and subsequent frame-by-frame TCP delivery without fragmentation.
-
-\begin{figure}[H]
-    \centering
-    \begin{minipage}{0.48\textwidth}
-        \centering
-        \includegraphics[width=\textwidth]{assets/tcp_setup.png}
-        \caption{Client-Server RTSP SETUP Handshake for TCP Transport}
-        \label{fig:tcp_setup}
-    \end{minipage}
-    \hfill
-    \begin{minipage}{0.48\textwidth}
-        \centering
-        \includegraphics[width=\textwidth]{assets/play_packet_tcp.png}
-        \caption{RTSP PLAY Request and TCP Framing Media Transfer}
-        \label{fig:tcp_play}
-    \end{minipage}
-\end{figure}
-
-\section{Client-Side Jitter Buffer Verification}
-The jitter buffer was tested under the following scenarios:
-
-\begin{itemize}
-    \item \textbf{Initial Buffering}: When the user clicks ``Play'', the render loop enters the buffering state. The console shows the buffer filling up to 15 frames before playback begins, providing a smooth startup experience with no initial stutter.
-    \item \textbf{Starvation Recovery}: By artificially delaying the server's sending rate, we observed the buffer draining to zero, the client re-entering the buffering state, and playback resuming smoothly after 15 frames accumulated again.
-    \item \textbf{Buffer Overflow Protection}: The 100-frame hard cap prevents memory exhaustion. When the producer outruns the consumer, the oldest frame is discarded (\texttt{pop(0)}).
-\end{itemize}
-
-\section{Setup Again / Quality Switch Verification}
-The ``Setup Again'' feature was tested in multiple scenarios:
-
-\begin{itemize}
-    \item \textbf{Switch During Playback}: While playing in SD/UDP, clicking Setup triggers the draining pipeline. The video continues playing from the buffer (visible for several frames), then the quality dialog appears. Selecting HD and clicking Play starts the video from frame 0 over TCP.
-    \item \textbf{Switch During Pause}: While paused, clicking Setup immediately clears the buffer and shows the quality dialog. No draining is needed since no frames are being rendered.
-    \item \textbf{Server Resource Cleanup}: Server logs confirm that the old sending thread is stopped, the old RTP socket is closed, and a fresh \texttt{VideoStream} is created upon re-SETUP. No resource leaks were observed.
-\end{itemize}
-
-\section{I/O Multiplexing Scalability}
-The \texttt{selectors}-based server was tested with multiple simultaneous clients. The single-threaded event loop correctly dispatched RTSP commands to the appropriate \texttt{ServerWorker} instances. Client disconnections were detected and cleaned up gracefully (selector unregistration, socket closure, worker dictionary removal).
-
-\newpage
-
-% ==================== Chapter 5: Conclusion ====================
-\chapter{Conclusion}
-We have successfully implemented a fully functional RTSP/RTP video streaming application that addresses all requirements outlined in the project specification. This project went beyond basic functional requirements by incorporating advanced networking concepts. The key accomplishments are summarized below:
-
-\begin{enumerate}
-    \item \textbf{RTSP/RTP Control \& Packetization}: Complete state-machine management for SETUP, PLAY, PAUSE, and TEARDOWN operations. Robust 12-byte RTP header encoding with proper version, payload type, sequence number, timestamp, marker bit, and SSRC fields. MTU-aware UDP fragmentation with marker-bit-based client-side reassembly (4/4 Points).
-    \item \textbf{I/O Multiplexing}: Modernized, single-threaded, event-driven server loop via Python's \texttt{selectors} module. Non-blocking sockets with proper \texttt{BlockingIOError} handling and graceful client disconnection cleanup (1/1 Point).
-    \item \textbf{HD Video Streaming over TCP}: Flawless frame-by-frame TCP transfer leveraging a custom 5-byte zero-padded ASCII size header. The \texttt{recv\_all()} helper guarantees complete frame reception regardless of TCP segmentation. Client-driven quality selection maps SD to UDP and HD to TCP transport (2/2 Points).
-    \item \textbf{Client-Side Caching and Quality Switch}: Thread-safe producer-consumer jitter buffer with high/low water mark buffering (15-frame threshold). Tkinter \texttt{after()}-based render loop for thread-safe GUI updates. Draining pipeline for graceful ``Setup Again'' transitions. Server-side re-SETUP handler that resets \texttt{VideoStream} to frame 0 while preserving the RTSP session (2.5/2.5 Points).
-    \item \textbf{English Technical Report}: Fully compiled, comprehensive document with deep code analysis and experimental verification (0.5/0.5 Point).
-\end{enumerate}
-
-Through this rigorous laboratory exercise, our team gained practical knowledge in network socket programming, byte-level packet manipulation, thread-safe asynchronous GUI development, I/O multiplexing, and adaptive multimedia streaming protocol design.
+When a client application is closed via the window manager, the application intercepts the \texttt{WM\_DELETE\_WINDOW} event and successfully executes \texttt{IP\_DROP\_MEMBERSHIP} on the socket. This forces the OS to send an IGMP Leave message, properly exiting the group and preventing continued unnecessary network traffic caching by local routers.
 
 \end{document}
