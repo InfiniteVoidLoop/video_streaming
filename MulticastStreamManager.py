@@ -50,7 +50,7 @@ class MulticastStreamManager:
         print(f"Multicast client unregistered: {session} ({clientCount} active)")
 
         if should_stop:
-            self._send_state_multicast_burst(STOPPED)
+            self._send_state_multicast_once(STOPPED)
 
     def setup(self, filename):
         """Prepare one shared video stream for multicast delivery."""
@@ -86,7 +86,7 @@ class MulticastStreamManager:
                 self.worker = threading.Thread(target=self._send_rtp_loop, daemon=True)
                 self.worker.start()
 
-        self._send_state_multicast_burst(PLAYING)
+        self._send_state_multicast_once(PLAYING)
 
     def pause(self):
         """Pause the shared multicast sender without resetting the video."""
@@ -110,7 +110,7 @@ class MulticastStreamManager:
                 self.worker = None
 
         if should_announce_paused:
-            self._send_state_multicast_burst(PAUSED)
+            self._send_state_multicast_once(PAUSED)
 
     def stop(self):
         """Stop the shared stream and release multicast resources."""
@@ -119,7 +119,7 @@ class MulticastStreamManager:
             self._stop_locked(close_socket=True)
             self.state = STOPPED
 
-        self._send_state_multicast_burst(STOPPED)
+        self._send_state_multicast_once(STOPPED)
 
     def _heartbeat_loop(self):
         """Re-broadcast current state every 0.5s so late-joining clients sync fast."""
@@ -177,7 +177,7 @@ class MulticastStreamManager:
                     self.state = STOPPED
                     self.worker = None
                     self.stopEvent.set()
-                self._send_state_multicast_burst(STOPPED)
+                self._send_state_multicast_once(STOPPED)
                 break
 
             self._send_frame(data, rtpSocket)
@@ -213,19 +213,12 @@ class MulticastStreamManager:
             version = self.stateVersion
         self._send_state_multicast_direct(state, version)
 
-    def _send_state_multicast_burst(self, state):
-        """Send state 3 times 100ms apart (in background) to survive UDP packet loss."""
-        import time
+    def _send_state_multicast_once(self, state):
+        """Send one state update packet."""
         with self.lock:
             self.stateVersion += 1
             version = self.stateVersion
-
-        def _burst():
-            for _ in range(3):
-                self._send_state_multicast_direct(state, version)
-                time.sleep(0.1)
-
-        threading.Thread(target=_burst, daemon=True).start()
+        self._send_state_multicast_direct(state, version)
 
     def _send_state_multicast_direct(self, state, version):
         """Send a state packet without incrementing the version counter."""
@@ -239,4 +232,3 @@ class MulticastStreamManager:
             print(f"Sending state multicast error: {e}")
         finally:
             stateSocket.close()
-
