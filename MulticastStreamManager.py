@@ -21,9 +21,6 @@ class MulticastStreamManager:
         self.stateVersion = 0
         self.rtpSeq = 0
         self.clientSessions = set()
-        self._heartbeat = threading.Thread(target=self._heartbeat_loop, daemon=True)
-        self._heartbeat.start()
-
     def register_client(self, session):
         """Track a client that joined the shared multicast stream."""
         with self.lock:
@@ -121,17 +118,6 @@ class MulticastStreamManager:
 
         self._send_state_multicast_once(STOPPED)
 
-    def _heartbeat_loop(self):
-        """Re-broadcast current state every 0.5s so late-joining clients sync fast."""
-        import time
-        while True:
-            time.sleep(0.5)
-            with self.lock:
-                current = self.state
-                version = self.stateVersion
-            if current != STOPPED:
-                self._send_state_multicast_direct(current, version)
-
     def _stop_locked(self, close_socket):
         self.stopEvent.set()
         worker = self.worker
@@ -186,7 +172,7 @@ class MulticastStreamManager:
         frameSize = len(data)
         bytesSent = 0
 
-        while bytesSent < frameSize and not self.stopEvent.isSet():
+        while bytesSent < frameSize and not self.stopEvent.is_set():
             chunkSize = min(self.MAX_RTP_PAYLOAD_SIZE, frameSize - bytesSent)
             chunkData = data[bytesSent:bytesSent + chunkSize]
             markerBit = (bytesSent + chunkSize) == frameSize
