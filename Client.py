@@ -232,10 +232,10 @@ class Client:
                 self.sendRtspRequest(self.PLAY)
                 self.state = self.PLAYING
             else:
+                self.master.after(120, self.renderClientBufferLoop)
                 self.state = self.PLAYING
 
             # Start UI clock play loop to render frames from buffer
-            self.master.after(120, self.renderClientBufferLoop)
 
     def renderClientBufferLoop(self):
         """ Render frames from buffer using clock """
@@ -555,7 +555,9 @@ class Client:
                         if self.serverStreamState == STREAM_PLAYING:
                             self.startPlaybackPipeline(sendRtsp=False)
                     elif self.requestSent == self.PLAY:
+                        print("Running checking")
                         self.state = self.PLAYING
+                        self.master.after(120, self.renderClientBufferLoop)
                     elif self.requestSent == self.PAUSE:
                         self.state = self.READY
                         self.pauseInProgress = False
