@@ -6,6 +6,8 @@ from CustomPacket import CustomPacket
 MULTICAST_GROUP = '239.1.1.1'
 MULTICAST_PORT = 5004
 UDP_MTU = 1400
+SOCKET_BUFFER_SIZE = 4 * 1024 * 1024
+FRAGMENT_SEND_INTERVAL = 0.0002
 
 def get_default_interface_ip():
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -91,6 +93,7 @@ def main():
     
     # Create UDP socket for multicast
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
+    sock.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, SOCKET_BUFFER_SIZE)
     sock.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_TTL, 2)
     sock.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_IF, socket.inet_aton(interface_ip))
     
@@ -118,8 +121,12 @@ def main():
                 sock.sendto(packet, (MULTICAST_GROUP, MULTICAST_PORT))
             except Exception as e:
                 print(f"Failed to send packet: {e}")
+
+            # Avoid dropping large FHD frames by blasting hundreds of UDP packets at once.
+            if fragment_count > 1:
+                time.sleep(FRAGMENT_SEND_INTERVAL)
         
-        # Broadcast frames at approximately 20 FPS (50 ms/frame)
+        # Keep a baseline frame interval; large fragmented frames may run slower due to pacing.
         time.sleep(0.05)
 
 if __name__ == "__main__":

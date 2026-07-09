@@ -4,10 +4,13 @@ import tkinter as tk
 from PIL import Image, ImageTk
 import io
 import sys
+import time
 from CustomPacket import CustomPacket
 
 MULTICAST_GROUP = '239.1.1.1'
 MULTICAST_PORT = 5004
+SOCKET_BUFFER_SIZE = 4 * 1024 * 1024
+STALE_FRAME_SECONDS = 2
 
 def get_default_interface_ip():
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -35,8 +38,10 @@ class Client:
         self.running = True
         self.expected_frame = 0
         self.received_frames = 0
+        self.completed_frames = 0
         self.lost_frames = 0
         self.fragment_buffers = {}
+        self.last_stats_update = 0
         
         self.setup_socket()
         
@@ -47,6 +52,7 @@ class Client:
     def setup_socket(self):
         # Create UDP socket
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
+        self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, SOCKET_BUFFER_SIZE)
         
         # Allow multiple clients on the same machine to bind to the same port
         self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -80,12 +86,16 @@ class Client:
                     buffer = self.fragment_buffers.setdefault(frame_num, {
                         'count': fragment_count,
                         'fragments': {},
+                        'updated_at': time.monotonic(),
                     })
 
                     if buffer['count'] == fragment_count:
                         buffer['fragments'][fragment_index] = payload
+                        buffer['updated_at'] = time.monotonic()
 
                     if len(buffer['fragments']) == buffer['count']:
+                        self.completed_frames += 1
+
                         # Loss detection is frame-based; display only complete frames.
                         if self.expected_frame > 0 and frame_num > self.expected_frame:
                             self.lost_frames += (frame_num - self.expected_frame)
@@ -95,16 +105,26 @@ class Client:
                         del self.fragment_buffers[frame_num]
 
                         # Drop stale incomplete frames to avoid unbounded growth.
-                        for stale_frame in list(self.fragment_buffers):
-                            if stale_frame < self.expected_frame:
-                                del self.fragment_buffers[stale_frame]
+                        self.cleanup_stale_frames()
 
                         # Schedule display update on the main GUI thread
                         self.master.after(0, self.update_display, frame)
                         self.master.after(0, self.update_stats)
+
+                    self.cleanup_stale_frames()
+                    now = time.monotonic()
+                    if now - self.last_stats_update >= 0.1:
+                        self.last_stats_update = now
+                        self.master.after(0, self.update_stats)
             except Exception as e:
                 if self.running:
                     print(f"Error receiving packet: {e}")
+
+    def cleanup_stale_frames(self):
+        now = time.monotonic()
+        for stale_frame, stale_buffer in list(self.fragment_buffers.items()):
+            if stale_frame < self.expected_frame or now - stale_buffer['updated_at'] > STALE_FRAME_SECONDS:
+                del self.fragment_buffers[stale_frame]
 
     def update_display(self, payload):
         # Display the video in real time
@@ -117,9 +137,12 @@ class Client:
             print(f"Error displaying frame: {e}")
 
     def update_stats(self):
-        total = self.received_frames + self.lost_frames
-        loss_rate = (self.lost_frames / total * 100) if total > 0 else 0
-        self.stats_label.config(text=f"Packets Received: {self.received_frames} | Lost: {self.lost_frames} | Loss Rate: {loss_rate:.2f}%")
+        total_frames = self.completed_frames + self.lost_frames
+        loss_rate = (self.lost_frames / total_frames * 100) if total_frames > 0 else 0
+        incomplete_frames = len(self.fragment_buffers)
+        self.stats_label.config(
+            text=f"Packets Received: {self.received_frames} | Complete Frames: {self.completed_frames} | Incomplete Frames: {incomplete_frames} | Lost Frames: {self.lost_frames} | Loss Rate: {loss_rate:.2f}%"
+        )
 
     def handler(self):
         """Clean up when exiting."""
