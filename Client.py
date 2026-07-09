@@ -81,7 +81,6 @@ class Client:
         self.label.grid(row=0, column=0, columnspan=4, sticky=W+E+N+S, padx=5, pady=5) 
     
     def setupMovie(self):
-        """Setup button handler - Đã thêm cấu hình xử lý riêng cho trạng thái PAUSE (READY)"""
         if self.state == self.INIT:
             self.chooseQuality()
 
@@ -104,7 +103,6 @@ class Client:
                 self.chooseQuality()     
 
     def startDrainingPipeline(self):
-        # print("Stop network stream, draining remaining buffered frames to UI.")
         if hasattr(self, 'playEvent'):
             self.playEvent.set()  # Signal play thread to stop
         self.isDraining = True
@@ -143,7 +141,7 @@ class Client:
         
         rb_sd = Radiobutton(
             frame, 
-            text="SD (720p) - UDP", 
+            text="UDP", 
             variable=self.quality_var, 
             value="SD", 
             fg="#E0E0E0", 
@@ -157,7 +155,7 @@ class Client:
         
         rb_hd = Radiobutton(
             frame, 
-            text="HD (1080p) - TCP", 
+            text="TCP", 
             variable=self.quality_var, 
             value="HD", 
             fg="#E0E0E0", 
@@ -240,7 +238,6 @@ class Client:
             self.sendRtspRequest(self.PLAY)
             
             # Start UI clock play loop to render frames from buffer
-            self.master.after(120, self.renderClientBufferLoop)  
 
     def renderClientBufferLoop(self):
         """ Render frames from buffer using clock """
@@ -515,9 +512,9 @@ class Client:
                         self.openRtpPort() 
                     elif self.requestSent == self.PLAY:
                         self.state = self.PLAYING
+                        self.master.after(120, self.renderClientBufferLoop)  
                     elif self.requestSent == self.PAUSE:
                         self.state = self.READY
-                        # The play thread exits. A new thread is created on resume.
                         self.playEvent.set()
                     elif self.requestSent == self.TEARDOWN:
                         self.state = self.INIT

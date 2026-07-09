@@ -189,6 +189,7 @@ class ServerWorker:
                         address = self.clientInfo['rtspSocket'][1][0]
                         port = int(self.clientInfo['rtpPort'])
                         packet = self.makeRtp(chunkData, self.rtpSeq, markerBit)
+                        print("Packet size: " + str(len(packet)) + " bytes, sending to " + address + ":" + str(port))
                         self.clientInfo['rtpSocket'].sendto(packet, (address, port))
                             
                         self.rtpSeq += 1
