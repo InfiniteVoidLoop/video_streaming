@@ -27,6 +27,7 @@ class Client:
         self.expected_frame = 0
         self.received_frames = 0
         self.lost_frames = 0
+        self.fragment_buffers = {}
         
         self.setup_socket()
         
@@ -57,25 +58,41 @@ class Client:
     def receive_loop(self):
         while self.running:
             try:
-                # Receive multicast packets (buffer size 65536 is large enough for our max frame size ~14KB)
-                data, _ = self.sock.recvfrom(65536)
+                data, _ = self.sock.recvfrom(2048)
                 if not data:
                     continue
                     
                 # Decode received packets using our CustomPacket
-                frame_num, payload = CustomPacket.decode(data)
+                frame_num, fragment_index, fragment_count, payload = CustomPacket.decode(data)
                 
                 if frame_num is not None:
-                    # Loss detection
-                    if self.expected_frame > 0 and frame_num > self.expected_frame:
-                        self.lost_frames += (frame_num - self.expected_frame)
-                    
-                    self.expected_frame = frame_num + 1
                     self.received_frames += 1
-                    
-                    # Schedule display update on the main GUI thread
-                    self.master.after(0, self.update_display, payload)
-                    self.master.after(0, self.update_stats)
+
+                    buffer = self.fragment_buffers.setdefault(frame_num, {
+                        'count': fragment_count,
+                        'fragments': {},
+                    })
+
+                    if buffer['count'] == fragment_count:
+                        buffer['fragments'][fragment_index] = payload
+
+                    if len(buffer['fragments']) == buffer['count']:
+                        # Loss detection is frame-based; display only complete frames.
+                        if self.expected_frame > 0 and frame_num > self.expected_frame:
+                            self.lost_frames += (frame_num - self.expected_frame)
+
+                        self.expected_frame = frame_num + 1
+                        frame = b''.join(buffer['fragments'][index] for index in range(buffer['count']))
+                        del self.fragment_buffers[frame_num]
+
+                        # Drop stale incomplete frames to avoid unbounded growth.
+                        for stale_frame in list(self.fragment_buffers):
+                            if stale_frame < self.expected_frame:
+                                del self.fragment_buffers[stale_frame]
+
+                        # Schedule display update on the main GUI thread
+                        self.master.after(0, self.update_display, frame)
+                        self.master.after(0, self.update_stats)
             except Exception as e:
                 if self.running:
                     print(f"Error receiving packet: {e}")

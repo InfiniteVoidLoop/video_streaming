@@ -5,6 +5,7 @@ from CustomPacket import CustomPacket
 
 MULTICAST_GROUP = '239.1.1.1'
 MULTICAST_PORT = 5004
+UDP_MTU = 1400
 
 class VideoStream:
     def __init__(self, filename):
@@ -94,14 +95,19 @@ def main():
             video_stream.reset()
             continue
             
-        # Packetize the frame using our custom format
-        packet = CustomPacket.encode(video_stream.frameNum, frame)
-        
-        # Send every frame to the multicast IP address
-        try:
-            sock.sendto(packet, (MULTICAST_GROUP, MULTICAST_PORT))
-        except Exception as e:
-            print(f"Failed to send packet: {e}")
+        # Split large frames so each UDP datagram stays under the target MTU.
+        max_payload_size = UDP_MTU - CustomPacket.HEADER_SIZE
+        fragment_count = (len(frame) + max_payload_size - 1) // max_payload_size
+
+        for fragment_index in range(fragment_count):
+            start = fragment_index * max_payload_size
+            payload = frame[start:start + max_payload_size]
+            packet = CustomPacket.encode(video_stream.frameNum, payload, fragment_index, fragment_count)
+
+            try:
+                sock.sendto(packet, (MULTICAST_GROUP, MULTICAST_PORT))
+            except Exception as e:
+                print(f"Failed to send packet: {e}")
         
         # Broadcast frames at approximately 20 FPS (50 ms/frame)
         time.sleep(0.05)
