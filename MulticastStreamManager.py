@@ -21,6 +21,8 @@ class MulticastStreamManager:
         self.stateVersion = 0
         self.rtpSeq = 0
         self.clientSessions = set()
+        self._heartbeat = threading.Thread(target=self._heartbeat_loop, daemon=True)
+        self._heartbeat.start()
 
     def register_client(self, session):
         """Track a client that joined the shared multicast stream."""
@@ -48,7 +50,7 @@ class MulticastStreamManager:
         print(f"Multicast client unregistered: {session} ({clientCount} active)")
 
         if should_stop:
-            self._send_state_multicast(STOPPED)
+            self._send_state_multicast_burst(STOPPED)
 
     def setup(self, filename):
         """Prepare one shared video stream for multicast delivery."""
@@ -84,7 +86,7 @@ class MulticastStreamManager:
                 self.worker = threading.Thread(target=self._send_rtp_loop, daemon=True)
                 self.worker.start()
 
-        self._send_state_multicast(PLAYING)
+        self._send_state_multicast_burst(PLAYING)
 
     def pause(self):
         """Pause the shared multicast sender without resetting the video."""
@@ -108,7 +110,7 @@ class MulticastStreamManager:
                 self.worker = None
 
         if should_announce_paused:
-            self._send_state_multicast(PAUSED)
+            self._send_state_multicast_burst(PAUSED)
 
     def stop(self):
         """Stop the shared stream and release multicast resources."""
@@ -117,7 +119,18 @@ class MulticastStreamManager:
             self._stop_locked(close_socket=True)
             self.state = STOPPED
 
-        self._send_state_multicast(STOPPED)
+        self._send_state_multicast_burst(STOPPED)
+
+    def _heartbeat_loop(self):
+        """Re-broadcast current state every 0.5s so late-joining clients sync fast."""
+        import time
+        while True:
+            time.sleep(0.5)
+            with self.lock:
+                current = self.state
+                version = self.stateVersion
+            if current != STOPPED:
+                self._send_state_multicast_direct(current, version)
 
     def _stop_locked(self, close_socket):
         self.stopEvent.set()
@@ -164,7 +177,7 @@ class MulticastStreamManager:
                     self.state = STOPPED
                     self.worker = None
                     self.stopEvent.set()
-                self._send_state_multicast(STOPPED)
+                self._send_state_multicast_burst(STOPPED)
                 break
 
             self._send_frame(data, rtpSocket)
@@ -198,7 +211,24 @@ class MulticastStreamManager:
         with self.lock:
             self.stateVersion += 1
             version = self.stateVersion
+        self._send_state_multicast_direct(state, version)
 
+    def _send_state_multicast_burst(self, state):
+        """Send state 3 times 100ms apart (in background) to survive UDP packet loss."""
+        import time
+        with self.lock:
+            self.stateVersion += 1
+            version = self.stateVersion
+
+        def _burst():
+            for _ in range(3):
+                self._send_state_multicast_direct(state, version)
+                time.sleep(0.1)
+
+        threading.Thread(target=_burst, daemon=True).start()
+
+    def _send_state_multicast_direct(self, state, version):
+        """Send a state packet without incrementing the version counter."""
         packet = encode_state_packet(state, version)
         stateSocket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         try:
@@ -209,3 +239,4 @@ class MulticastStreamManager:
             print(f"Sending state multicast error: {e}")
         finally:
             stateSocket.close()
+
