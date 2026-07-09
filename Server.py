@@ -2,6 +2,7 @@ import sys, socket
 import selectors
 
 from ServerWorker import ServerWorker
+from VideoStream import VideoStream
 
 class Server:   
     def __init__(self):
