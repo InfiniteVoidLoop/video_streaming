@@ -1,7 +1,7 @@
 from tkinter import *
 import tkinter.messagebox
 from PIL import Image, ImageTk
-import socket, threading, sys, traceback, os
+import socket, threading, sys, traceback, os, io
 
 tkMessageBox = tkinter.messagebox
 
@@ -243,7 +243,6 @@ class Client:
         """ Render frames from buffer using clock """
         if self.state != self.PLAYING and not self.isDraining:
             return
-
         with self.bufferLock:
             if self.isBuffering and not self.isDraining:
                 if len(self.frameBuffer) >= self.minBufferSize:
@@ -254,7 +253,7 @@ class Client:
 
             if len(self.frameBuffer) > 0:
                 frame_bytes = self.frameBuffer.pop(0)
-                self.updateMovie(self.writeFrame(frame_bytes))
+                self.updateMovie(frame_bytes)
             else:
                 if self.isDraining:  
                     # print("Buffer completely drained. Stopping playback.")
@@ -404,10 +403,10 @@ class Client:
         
         return cachename
     
-    def updateMovie(self, imageFile):
-        """Update the image file as video frame in the GUI."""
+    def updateMovie(self, data):
+        """Update the image data as video frame in the GUI."""
         try:
-            photo = ImageTk.PhotoImage(Image.open(imageFile))
+            photo = ImageTk.PhotoImage(Image.open(io.BytesIO(data)))
             self.label.configure(image = photo, height=288) 
             self.label.image = photo
         except Exception as e:
