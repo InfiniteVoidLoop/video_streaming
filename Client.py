@@ -76,9 +76,9 @@ class Client:
         self.teardown["command"] =  self.exitClient
         self.teardown.grid(row=1, column=3, padx=2, pady=2)
         
-        # Create a label to display the movie
-        self.label = Label(self.master, height=19)
-        self.label.grid(row=0, column=0, columnspan=4, sticky=W+E+N+S, padx=5, pady=5) 
+        # Create a label to display the movie — no fixed size so it scales with SD/HD/FHD
+        self.label = Label(self.master, bg="black")
+        self.label.grid(row=0, column=0, columnspan=4, padx=5, pady=5)
     
     def setupMovie(self):
         if self.state == self.INIT:
@@ -407,7 +407,7 @@ class Client:
         """Update the image data as video frame in the GUI."""
         try:
             photo = ImageTk.PhotoImage(Image.open(io.BytesIO(data)))
-            self.label.configure(image = photo, height=288) 
+            self.label.configure(image = photo)
             self.label.image = photo
         except Exception as e:
             print("Skipped corrupted frame:", e)
