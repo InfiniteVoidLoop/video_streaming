@@ -9,11 +9,20 @@ from CustomPacket import CustomPacket
 MULTICAST_GROUP = '239.1.1.1'
 MULTICAST_PORT = 5004
 
+def get_default_interface_ip():
+    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        sock.connect((MULTICAST_GROUP, MULTICAST_PORT))
+        return sock.getsockname()[0]
+    finally:
+        sock.close()
+
 class Client:
-    def __init__(self, master):
+    def __init__(self, master, interface_ip=None):
         self.master = master
         self.master.title("Multicast Video Client")
         self.master.protocol("WM_DELETE_WINDOW", self.handler)
+        self.interface_ip = interface_ip or get_default_interface_ip()
         
         # UI Elements
         self.label = tk.Label(self.master, text="Waiting for multicast stream...", bg="black", fg="white", width=60, height=20)
@@ -51,9 +60,9 @@ class Client:
         self.sock.bind(('', MULTICAST_PORT))
         
         # Join the multicast group
-        mreq = socket.inet_aton(MULTICAST_GROUP) + socket.inet_aton('0.0.0.0')
+        mreq = socket.inet_aton(MULTICAST_GROUP) + socket.inet_aton(self.interface_ip)
         self.sock.setsockopt(socket.IPPROTO_IP, socket.IP_ADD_MEMBERSHIP, mreq)
-        print(f"Joined multicast group {MULTICAST_GROUP}:{MULTICAST_PORT}")
+        print(f"Joined multicast group {MULTICAST_GROUP}:{MULTICAST_PORT} via {self.interface_ip}")
         
     def receive_loop(self):
         while self.running:
@@ -117,7 +126,7 @@ class Client:
         self.running = False
         try:
             # Leave the multicast group when exiting
-            mreq = socket.inet_aton(MULTICAST_GROUP) + socket.inet_aton('0.0.0.0')
+            mreq = socket.inet_aton(MULTICAST_GROUP) + socket.inet_aton(self.interface_ip)
             self.sock.setsockopt(socket.IPPROTO_IP, socket.IP_DROP_MEMBERSHIP, mreq)
             self.sock.close()
             print("Left multicast group.")
@@ -127,6 +136,11 @@ class Client:
         self.master.destroy()
 
 if __name__ == "__main__":
+    if len(sys.argv) > 2:
+        print("Usage: python Client.py [interface_ip]")
+        sys.exit(1)
+
+    interface_ip = sys.argv[1] if len(sys.argv) == 2 else None
     root = tk.Tk()
-    client = Client(root)
+    client = Client(root, interface_ip)
     root.mainloop()

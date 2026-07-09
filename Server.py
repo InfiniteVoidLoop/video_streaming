@@ -7,6 +7,14 @@ MULTICAST_GROUP = '239.1.1.1'
 MULTICAST_PORT = 5004
 UDP_MTU = 1400
 
+def get_default_interface_ip():
+    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        sock.connect((MULTICAST_GROUP, MULTICAST_PORT))
+        return sock.getsockname()[0]
+    finally:
+        sock.close()
+
 class VideoStream:
     def __init__(self, filename):
         self.filename = filename
@@ -74,19 +82,21 @@ class VideoStream:
         self.frameNum = 0
 
 def main():
-    if len(sys.argv) != 2:
-        print("Usage: python Server.py <file MJPEG>")
+    if len(sys.argv) not in (2, 3):
+        print("Usage: python Server.py <file MJPEG> [interface_ip]")
         sys.exit(1)
-        
+
     filename = sys.argv[1]
+    interface_ip = sys.argv[2] if len(sys.argv) == 3 else get_default_interface_ip()
     
     # Create UDP socket for multicast
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
     sock.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_TTL, 2)
+    sock.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_IF, socket.inet_aton(interface_ip))
     
     video_stream = VideoStream(filename)
     
-    print(f"Starting multicast streaming to {MULTICAST_GROUP}:{MULTICAST_PORT}...")
+    print(f"Starting multicast streaming to {MULTICAST_GROUP}:{MULTICAST_PORT} via {interface_ip}...")
     
     while True:
         frame = video_stream.nextFrame()
