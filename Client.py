@@ -336,8 +336,8 @@ class Client:
 
         while not self.playEvent.isSet():
             try:
-                # Read 5-byte length prefix (ASCII string)
-                length_bytes = self.recv_all(self.rtpConnection, 5)
+                # Read 10-byte length prefix (ASCII string)
+                length_bytes = self.recv_all(self.rtpConnection, 10)
                 if not length_bytes:
                     break
                 length = int(length_bytes.decode())

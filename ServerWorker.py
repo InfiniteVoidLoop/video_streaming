@@ -147,7 +147,7 @@ class ServerWorker:
     
     # NOTE: Implement fragmentation for frames exceeding the MTU
     def sendRtpWithTCP(self):
-        """Send video frames over TCP frame-by-frame with a 5-byte ASCII size header."""
+        """Send video frames over TCP frame-by-frame with a 10-byte ASCII size header."""
         while True:
             self.clientInfo['event'].wait(0.05) 
             
@@ -159,9 +159,9 @@ class ServerWorker:
             if data: 
                 try:
                     frameSize = len(data)
-                    # Format size as a 5-byte ASCII string, padded with leading zeros (e.g. "06742")
-                    sizeHeader = str(frameSize).zfill(5).encode()
-                    # Send 5-byte size header followed by the raw frame data
+                    # Format size as a 10-byte ASCII string, padded with leading zeros
+                    sizeHeader = str(frameSize).zfill(10).encode()
+                    # Send 10-byte size header followed by the raw frame data
                     self.clientInfo['rtpSocket'].sendall(sizeHeader + data)
                 except Exception as e:
                     print(f"Sending video frame with TCP error: {e}")
