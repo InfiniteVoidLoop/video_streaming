@@ -15,19 +15,58 @@ class VideoStream:
             print(f"Error: Could not open {filename}")
             sys.exit(1)
         self.frameNum = 0
+        self.lengthPrefixed = self._is_length_prefixed()
+
+    def _is_length_prefixed(self):
+        """Detect the original sample format: 5 ASCII digits before each frame."""
+        prefix = self.file.read(5)
+        self.file.seek(0)
+        return len(prefix) == 5 and prefix.isdigit()
         
     def nextFrame(self):
-        # The first 5 bytes represent the frame length
+        if not self.lengthPrefixed:
+            return self._next_jpeg_frame()
+
         data = self.file.read(5)
-        if data:
-            try:
-                framelength = int(data)
-                frame = self.file.read(framelength)
-                self.frameNum += 1
-                return frame
-            except ValueError:
+        if not data:
+            return None
+
+        framelength = int(data)
+        frame = self.file.read(framelength)
+        if len(frame) != framelength:
+            return None
+
+        self.frameNum += 1
+        return frame
+
+    def _next_jpeg_frame(self):
+        """Read one JPEG image from a standard concatenated MJPEG stream."""
+        frame = bytearray()
+        prev = None
+
+        while True:
+            byte = self.file.read(1)
+            if not byte:
                 return None
-        return None
+
+            value = byte[0]
+            if prev == 0xFF and value == 0xD8:
+                frame.extend((0xFF, 0xD8))
+                break
+            prev = value
+
+        prev = None
+        while True:
+            byte = self.file.read(1)
+            if not byte:
+                return None
+
+            value = byte[0]
+            frame.append(value)
+            if prev == 0xFF and value == 0xD9:
+                self.frameNum += 1
+                return bytes(frame)
+            prev = value
 
     def reset(self):
         self.file.seek(0)
