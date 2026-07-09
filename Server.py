@@ -7,7 +7,8 @@ MULTICAST_GROUP = '239.1.1.1'
 MULTICAST_PORT = 5004
 UDP_MTU = 1400
 SOCKET_BUFFER_SIZE = 4 * 1024 * 1024
-FRAGMENT_SEND_INTERVAL = 0.0002
+FRAGMENT_SEND_INTERVAL = 0.005
+FRAGMENT_REDUNDANCY = 2
 
 def get_default_interface_ip():
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -112,19 +113,20 @@ def main():
         max_payload_size = UDP_MTU - CustomPacket.HEADER_SIZE
         fragment_count = (len(frame) + max_payload_size - 1) // max_payload_size
 
-        for fragment_index in range(fragment_count):
-            start = fragment_index * max_payload_size
-            payload = frame[start:start + max_payload_size]
-            packet = CustomPacket.encode(video_stream.frameNum, payload, fragment_index, fragment_count)
+        for redundancy_round in range(FRAGMENT_REDUNDANCY):
+            for fragment_index in range(fragment_count):
+                start = fragment_index * max_payload_size
+                payload = frame[start:start + max_payload_size]
+                packet = CustomPacket.encode(video_stream.frameNum, payload, fragment_index, fragment_count)
 
-            try:
-                sock.sendto(packet, (MULTICAST_GROUP, MULTICAST_PORT))
-            except Exception as e:
-                print(f"Failed to send packet: {e}")
+                try:
+                    sock.sendto(packet, (MULTICAST_GROUP, MULTICAST_PORT))
+                except Exception as e:
+                    print(f"Failed to send packet: {e}")
 
-            # Avoid dropping large FHD frames by blasting hundreds of UDP packets at once.
-            if fragment_count > 1:
-                time.sleep(FRAGMENT_SEND_INTERVAL)
+                # Avoid dropping large FHD frames by blasting hundreds of UDP packets at once.
+                if fragment_count > 1:
+                    time.sleep(FRAGMENT_SEND_INTERVAL)
         
         # Keep a baseline frame interval; large fragmented frames may run slower due to pacing.
         time.sleep(0.05)

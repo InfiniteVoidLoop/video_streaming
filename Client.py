@@ -10,7 +10,9 @@ from CustomPacket import CustomPacket
 MULTICAST_GROUP = '239.1.1.1'
 MULTICAST_PORT = 5004
 SOCKET_BUFFER_SIZE = 4 * 1024 * 1024
-STALE_FRAME_SECONDS = 2
+STALE_FRAME_SECONDS = 5
+FRAGMENT_TIMEOUT_SECONDS = 0.02
+MISSING_FRAGMENT_PREVIEW = 20
 
 def get_default_interface_ip():
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -39,6 +41,7 @@ class Client:
         self.expected_frame = 0
         self.received_frames = 0
         self.completed_frames = 0
+        self.expired_frames = 0
         self.lost_frames = 0
         self.fragment_buffers = {}
         self.last_stats_update = 0
@@ -123,8 +126,26 @@ class Client:
     def cleanup_stale_frames(self):
         now = time.monotonic()
         for stale_frame, stale_buffer in list(self.fragment_buffers.items()):
-            if stale_frame < self.expected_frame or now - stale_buffer['updated_at'] > STALE_FRAME_SECONDS:
+            if stale_frame < self.expected_frame:
                 del self.fragment_buffers[stale_frame]
+                continue
+
+            timeout = max(STALE_FRAME_SECONDS, stale_buffer['count'] * FRAGMENT_TIMEOUT_SECONDS)
+            if now - stale_buffer['updated_at'] > timeout:
+                self.log_expired_frame(stale_frame, stale_buffer)
+                self.expired_frames += 1
+                del self.fragment_buffers[stale_frame]
+
+    def log_expired_frame(self, frame_num, buffer):
+        received = len(buffer['fragments'])
+        expected = buffer['count']
+        missing = [index for index in range(expected) if index not in buffer['fragments']]
+        preview = missing[:MISSING_FRAGMENT_PREVIEW]
+        suffix = "" if len(missing) <= MISSING_FRAGMENT_PREVIEW else f" ... +{len(missing) - MISSING_FRAGMENT_PREVIEW} more"
+        print(
+            f"Expired frame {frame_num}: received {received}/{expected} fragments, "
+            f"missing {len(missing)} [{', '.join(map(str, preview))}{suffix}]"
+        )
 
     def update_display(self, payload):
         # Display the video in real time
@@ -141,7 +162,7 @@ class Client:
         loss_rate = (self.lost_frames / total_frames * 100) if total_frames > 0 else 0
         incomplete_frames = len(self.fragment_buffers)
         self.stats_label.config(
-            text=f"Packets Received: {self.received_frames} | Complete Frames: {self.completed_frames} | Incomplete Frames: {incomplete_frames} | Lost Frames: {self.lost_frames} | Loss Rate: {loss_rate:.2f}%"
+            text=f"Packets Received: {self.received_frames} | Complete Frames: {self.completed_frames} | Incomplete Frames: {incomplete_frames} | Expired Frames: {self.expired_frames} | Lost Frames: {self.lost_frames} | Loss Rate: {loss_rate:.2f}%"
         )
 
     def handler(self):
