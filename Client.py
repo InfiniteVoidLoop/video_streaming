@@ -295,7 +295,8 @@ class Client:
                     print("Current Seq Num: " + str(currSeqNbr))
                     print("Size of packet: " + str(len(data)))
 
-                    if currSeqNbr > self.frameNbr: # Discard the late packet
+                    # Handle sequence wrap-around and out-of-order packets gracefully
+                    if currSeqNbr > self.frameNbr or self.frameNbr - currSeqNbr > 32768:
                         self.frameNbr = currSeqNbr
                         buffer.append(rtpPacket.getPayload())
 
@@ -408,9 +409,12 @@ class Client:
     
     def updateMovie(self, imageFile):
         """Update the image file as video frame in the GUI."""
-        photo = ImageTk.PhotoImage(Image.open(imageFile))
-        self.label.configure(image = photo, height=288) 
-        self.label.image = photo
+        try:
+            photo = ImageTk.PhotoImage(Image.open(imageFile))
+            self.label.configure(image = photo, height=288) 
+            self.label.image = photo
+        except Exception as e:
+            print("Skipped corrupted frame:", e)
         
     def connectToServer(self):
         """Connect to the Server. Start a new RTSP/TCP session."""
