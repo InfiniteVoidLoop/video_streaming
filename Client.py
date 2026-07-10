@@ -142,7 +142,7 @@ class Client:
         )
         title_label.pack(pady=12)
 
-        self.quality_var = StringVar(value="SD")
+        self.quality_var = StringVar(value="UDP")
 
         frame = Frame(self.quality_window, bg="#1E1E1E")
         frame.pack()
@@ -151,7 +151,7 @@ class Client:
             frame,
             text="UDP",
             variable=self.quality_var,
-            value="SD",
+            value="UDP",
             fg="#E0E0E0",
             bg="#1E1E1E",
             selectcolor="#2C2C2C",
@@ -165,7 +165,7 @@ class Client:
             frame,
             text="TCP",
             variable=self.quality_var,
-            value="HD",
+            value="TCP",
             fg="#E0E0E0",
             bg="#1E1E1E",
             selectcolor="#2C2C2C",
