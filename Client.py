@@ -38,7 +38,6 @@ class Client:
         self.connectToServer()
         self.frameNbr = -1
         self.transport = "UDP"
-        self.quality = "SD"
         self.rtpConnection = None
         self.frameBuffer = []
 
@@ -195,12 +194,7 @@ class Client:
         self.master.wait_window(self.quality_window)
 
     def confirmTransportProtocol(self):
-        self.quality = self.quality_var.get()
-        if self.quality == "HD":
-            self.transport = "TCP"
-        else:
-            self.transport = "UDP"
-
+        self.transport = self.quality_var.get()
         self.quality_window.destroy()
         self.sendRtspRequest(self.SETUP)
 
@@ -211,7 +205,7 @@ class Client:
         try:
             os.remove(
                 CACHE_FILE_NAME
-                + self.quality.lower()
+                + self.transport.lower()
                 + "-"
                 + str(self.sessionId)
                 + CACHE_FILE_EXT
@@ -233,9 +227,8 @@ class Client:
             if hasattr(self, "playEvent"):
                 self.playEvent.set()  # Signal old thread to stop
             if hasattr(self, "_rtpThread") and self._rtpThread.is_alive():
-                self._rtpThread.join(timeout=1.0)  # Wait for it to die
+                self._rtpThread.join(timeout=1.0)  
 
-            # Now safe to create new event and thread
             self.playEvent = threading.Event()
             self.playEvent.clear()
 
@@ -300,17 +293,17 @@ class Client:
         buffer = []
         while not self.playEvent.isSet():
             try:
-                data = self.rtpSocket.recv(2000)
+                data = self.rtpSocket.recv(1412)
                 if data:
                     rtpPacket = RtpPacket()
                     rtpPacket.decode(data)
 
                     currSeqNbr = rtpPacket.seqNum()
+                    print("Received Frame Over UDP")
                     print("Current Seq Num: " + str(currSeqNbr))
                     print("Size of packet: " + str(len(data)))
 
-                    # Handle sequence wrap-around and out-of-order packets gracefully
-                    if currSeqNbr > self.frameNbr or self.frameNbr - currSeqNbr > 32768:
+                    if self.frameNbr == -1 or (0 < (currSeqNbr - self.frameNbr) % 65536 < 32768):
                         self.frameNbr = currSeqNbr
                         buffer.append(rtpPacket.getPayload())
 
@@ -420,7 +413,7 @@ class Client:
         """Write the received frame to a temp image file. Return the image file."""
         cachename = (
             CACHE_FILE_NAME
-            + self.quality.lower()
+            + self.transport.lower()
             + "-"
             + str(self.sessionId)
             + CACHE_FILE_EXT
