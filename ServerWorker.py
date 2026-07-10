@@ -59,19 +59,19 @@ class ServerWorker:
         
         # Process SETUP request
         if requestType == self.SETUP:
-            print("processing SETUP\n")
-            if 'event' in self.clientInfo and self.clientInfo['event']:
-                try: self.clientInfo['event'].set()
+            print("Processing SETUP\n")
+            # Clean up previous session resources if they exist
+            if 'threadFlag' in self.clientInfo and self.clientInfo['threadFlag']:   # send frame event flag
+                try: self.clientInfo['threadFlag'].set()
                 except: pass
                 
-            if 'worker' in self.clientInfo and self.clientInfo['worker']:
-                try: self.clientInfo['worker'].join(timeout=0.2)
+            if 'threadWorker' in self.clientInfo and self.clientInfo['threadWorker']:   # send frame event worker
+                try: self.clientInfo['threadWorker'].join(timeout=0.2)
                 except: pass
                 
-            if 'rtpSocket' in self.clientInfo and self.clientInfo['rtpSocket']:
+            if 'rtpSocket' in self.clientInfo and self.clientInfo['rtpSocket']:     # client rtp socket
                 try: self.clientInfo['rtpSocket'].close()
                 except: pass            
-            # print("Cleaned up previous session resources")
             
             try:
                 self.clientInfo['videoStream'] = VideoStream(filename)
@@ -87,28 +87,27 @@ class ServerWorker:
             # Send RTSP reply
             self.replyRtsp(self.OK_200, seq[1])
                 
-            # Parse Transport header
+            # Parse Transport protocol 
             transport_line = request[2]
             self.clientInfo['transport'] = 'UDP'
             if 'TCP' in transport_line:
                 self.clientInfo['transport'] = 'TCP'
-                
-                # Extract client_port robustly
+               
+            # Parse transport port
             parts = transport_line.split(';')
             for part in parts:
                 if 'client_port' in part:
                     self.clientInfo['rtpPort'] = part.split('=')[1].strip()
-                    # print("Successfully parsed client_port: " + self.clientInfo['rtpPort'])
                     break
                         
         # Process PLAY request      
         elif requestType == self.PLAY:
             if self.state == self.READY:
-                print("processing PLAY\n")
+                print("Processing PLAY\n")
                 self.state = self.PLAYING
                 
                 # Create a new socket for RTP
-                if self.clientInfo.get('transport', 'UDP') == 'TCP':
+                if self.clientInfo['transport'] == 'TCP':
                     self.clientInfo["rtpSocket"] = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                     address = self.clientInfo['rtspSocket'][1][0]
                     port = int(self.clientInfo['rtpPort'])
@@ -120,9 +119,9 @@ class ServerWorker:
                 self.replyRtsp(self.OK_200, seq[1])
                 
                 # Create a new thread and start sending RTP packets
-                self.clientInfo['event'] = threading.Event()
-                self.clientInfo['worker']= threading.Thread(target=self.sendRtp) 
-                self.clientInfo['worker'].start()
+                self.clientInfo['threadFlag'] = threading.Event()
+                self.clientInfo['threadWorker']= threading.Thread(target=self.sendRtp) 
+                self.clientInfo['threadWorker'].start()
         
         # Process PAUSE request
         elif requestType == self.PAUSE:
@@ -130,7 +129,7 @@ class ServerWorker:
                 print("processing PAUSE\n")
                 self.state = self.READY
                 
-                self.clientInfo['event'].set()
+                self.clientInfo['threadFlag'].set()
             
                 self.replyRtsp(self.OK_200, seq[1])
         
@@ -138,7 +137,7 @@ class ServerWorker:
         elif requestType == self.TEARDOWN:
             print("processing TEARDOWN\n")
 
-            self.clientInfo['event'].set()
+            self.clientInfo['threadFlag'].set()
             
             self.replyRtsp(self.OK_200, seq[1])
             
@@ -149,10 +148,10 @@ class ServerWorker:
     def sendRtpWithTCP(self):
         """Send video frames over TCP frame-by-frame with a 10-byte ASCII size header."""
         while True:
-            self.clientInfo['event'].wait(0.05) 
+            self.clientInfo['threadFlag'].wait(0.05) 
             
             # Stop sending if request is PAUSE or TEARDOWN
-            if self.clientInfo['event'].isSet(): 
+            if self.clientInfo['threadFlag'].isSet(): 
                 break 
                 
             data = self.clientInfo['videoStream'].nextFrame()
@@ -171,10 +170,10 @@ class ServerWorker:
         """Send RTP packets using UDP"""
         MAX_RTP_PAYLOAD_SIZE = 1400 # MTU - RTP header size
         while True:
-            self.clientInfo['event'].wait(0.05) 
+            self.clientInfo['threadFlag'].wait(0.05) 
             
             # Stop sending if request is PAUSE or TEARDOWN
-            if self.clientInfo['event'].isSet(): 
+            if self.clientInfo['threadFlag'].isSet(): 
                 break 
                 
             data = self.clientInfo['videoStream'].nextFrame()
@@ -200,7 +199,7 @@ class ServerWorker:
 
     def sendRtp(self):
         """Send RTP packets."""
-        if self.clientInfo.get('transport', 'UDP') == 'TCP':
+        if self.clientInfo['transport'] == 'TCP':
             return self.sendRtpWithTCP()
         else:
             return self.sendRtpWithUDP()

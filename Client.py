@@ -41,6 +41,7 @@ class Client:
         self.quality = "SD"
         self.rtpConnection = None
         self.frameBuffer = []
+
         # NOTE: Handle buffer access UI and network
         self.bufferLock = threading.Lock()
         self.minBufferSize = 15

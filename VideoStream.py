@@ -1,4 +1,5 @@
 import sys
+CHUNK_SIZE = 65536  
 
 class VideoStream:
     def __init__(self, filename):
@@ -45,7 +46,7 @@ class VideoStream:
                         self.frameNum += 1
                         return frame
                 
-                chunk = self.file.read(65536)
+                chunk = self.file.read(CHUNK_SIZE)
                 if not chunk:
                     return None
                 self.buffer += chunk
